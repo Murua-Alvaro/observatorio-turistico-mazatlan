@@ -1,6 +1,7 @@
-import { lazy, Suspense, useState } from 'react';
-import { Anchor, BedDouble, Building2, CalendarDays, CarFront, Database, Globe2, LayoutDashboard, MapPin, Menu, Plane, X } from 'lucide-react';
+import { lazy, Suspense, useMemo, useState } from 'react';
+import { Anchor, BedDouble, Building2, CalendarDays, CarFront, Database, Download, FileDown, Globe2, LayoutDashboard, Lightbulb, MapPin, Menu, Plane, RefreshCw, X } from 'lucide-react';
 import { data } from './data/model';
+import { downloadObservatoryCsv, printExecutiveReport, type ObservatoryYear } from './lib/export';
 
 const Panorama = lazy(() => import('./pages/Panorama').then((m) => ({ default: m.Panorama })));
 const Business = lazy(() => import('./pages/Business').then((m) => ({ default: m.Business })));
@@ -9,13 +10,16 @@ const Airport = lazy(() => import('./pages/Airport').then((m) => ({ default: m.A
 const Cruises = lazy(() => import('./pages/Cruises').then((m) => ({ default: m.Cruises })));
 const Markets = lazy(() => import('./pages/Markets').then((m) => ({ default: m.Markets })));
 const Mobility = lazy(() => import('./pages/Mobility').then((m) => ({ default: m.Mobility })));
+const Insights = lazy(() => import('./pages/Insights').then((m) => ({ default: m.Insights })));
 const Methodology = lazy(() => import('./pages/Methodology').then((m) => ({ default: m.Methodology })));
 
-type Tab = 'panorama' | 'business' | 'hotel' | 'airport' | 'cruises' | 'markets' | 'mobility' | 'methodology';
-
+export type ViewMode = 'monthly' | 'cumulative';
+type Tab = 'panorama' | 'business' | 'hotel' | 'airport' | 'cruises' | 'markets' | 'mobility' | 'insights' | 'methodology';
 type NavItem = { id: Tab; label: string; group: string; icon: typeof LayoutDashboard };
+
 const nav: NavItem[] = [
   { id: 'panorama', label: 'Resumen ejecutivo', group: 'Observatorio', icon: LayoutDashboard },
+  { id: 'insights', label: 'Centro de hallazgos', group: 'Observatorio', icon: Lightbulb },
   { id: 'business', label: 'Empresas y comercio', group: 'Audiencias', icon: Building2 },
   { id: 'hotel', label: 'Sector hotelero', group: 'Audiencias', icon: BedDouble },
   { id: 'airport', label: 'Conectividad aérea', group: 'Indicadores', icon: Plane },
@@ -28,6 +32,9 @@ const nav: NavItem[] = [
 export default function App() {
   const [tab, setTab] = useState<Tab>('panorama');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [year, setYear] = useState<ObservatoryYear>(2026);
+  const [viewMode, setViewMode] = useState<ViewMode>('monthly');
+  const [compare, setCompare] = useState(true);
 
   const open = (next: Tab) => {
     setTab(next);
@@ -35,16 +42,17 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const pages: Record<Tab, React.ReactNode> = {
-    panorama: <Panorama onOpenAirport={() => open('airport')} onOpenBusiness={() => open('business')} onOpenHotel={() => open('hotel')} />,
-    business: <Business />,
-    hotel: <Hotel />,
-    airport: <Airport />,
-    cruises: <Cruises />,
-    markets: <Markets />,
+  const pages = useMemo<Record<Tab, React.ReactNode>>(() => ({
+    panorama: <Panorama year={year} viewMode={viewMode} compare={compare} onOpenAirport={() => open('airport')} onOpenBusiness={() => open('business')} onOpenHotel={() => open('hotel')} onOpenInsights={() => open('insights')} />,
+    business: <Business year={year} viewMode={viewMode} compare={compare} onNavigate={open} />,
+    hotel: <Hotel year={year} compare={compare} onNavigate={open} />,
+    airport: <Airport year={year} viewMode={viewMode} compare={compare} />,
+    cruises: <Cruises year={year} viewMode={viewMode} compare={compare} />,
+    markets: <Markets year={year} />,
     mobility: <Mobility />,
+    insights: <Insights year={year} onNavigate={open} />,
     methodology: <Methodology />,
-  };
+  }), [year, viewMode, compare]);
 
   return <div className="app-shell app-shell--pro">
     <button className="mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Abrir navegación"><Menu size={20}/></button>
@@ -71,16 +79,23 @@ export default function App() {
 
       <div className="sidebar__foot">
         <div className="data-status"><span className="status-dot"/><div><strong>Datos auditados</strong><small>Corte {data.meta.cutoff}</small></div></div>
-        <span className="sidebar__micro">Fuentes oficiales · OMA · DataTur · SEMAR · SICT · INEGI</span>
+        <span className="sidebar__micro">OMA · DataTur · SEMAR · SICT · INEGI. Las métricas conservan frecuencia y alcance de su fuente.</span>
       </div>
     </aside>
 
     {menuOpen ? <button className="sidebar-backdrop" onClick={() => setMenuOpen(false)} aria-label="Cerrar navegación"/> : null}
 
     <div className="workspace">
-      <header className="workspace-bar">
+      <header className="workspace-bar workspace-bar--controls">
         <div className="workspace-bar__title"><span>INTELIGENCIA TURÍSTICA</span><strong>{nav.find((item) => item.id === tab)?.label}</strong></div>
-        <div className="workspace-bar__meta"><CalendarDays size={15}/><span>Periodo principal</span><strong>2025—2026</strong></div>
+        <div className="workspace-controls">
+          <div className="toolbar-cluster" aria-label="Año"><span>Año</span><div className="toolbar-segment"><button className={year === 2025 ? 'active' : ''} onClick={() => setYear(2025)}>2025</button><button className={year === 2026 ? 'active' : ''} onClick={() => setYear(2026)}>2026</button></div></div>
+          <div className="toolbar-cluster toolbar-cluster--view" aria-label="Vista"><span>Vista</span><div className="toolbar-segment"><button className={viewMode === 'monthly' ? 'active' : ''} onClick={() => setViewMode('monthly')}>Mensual</button><button className={viewMode === 'cumulative' ? 'active' : ''} onClick={() => setViewMode('cumulative')}>Acumulada</button></div></div>
+          <button className={`toolbar-button ${compare ? 'active' : ''}`} onClick={() => setCompare((v) => !v)} title="Activar o desactivar comparación interanual"><RefreshCw size={14}/> Comparar</button>
+          <button className="toolbar-button" onClick={() => downloadObservatoryCsv(year)}><Download size={14}/> CSV</button>
+          <button className="toolbar-button toolbar-button--primary" onClick={printExecutiveReport}><FileDown size={14}/> Reporte</button>
+        </div>
+        <div className="workspace-bar__meta"><CalendarDays size={15}/><span>Corte</span><strong>{data.meta.cutoff}</strong></div>
       </header>
 
       <main className="workspace-main">
@@ -89,7 +104,7 @@ export default function App() {
         </Suspense>
       </main>
 
-      <footer className="pro-footer"><div><strong>Observatorio Turístico de Mazatlán</strong><span>Infraestructura analítica independiente para decisión empresarial y sectorial.</span></div><button onClick={() => open('methodology')}>Trazabilidad y fuentes</button></footer>
+      <footer className="pro-footer"><div><strong>Observatorio Turístico de Mazatlán</strong><span>Herramienta analítica para cámaras empresariales, hotelería y planeación sectorial.</span></div><button onClick={() => open('methodology')}>Trazabilidad y fuentes</button></footer>
     </div>
   </div>;
 }

@@ -16,7 +16,7 @@ export function Airport() {
     <div className="metric-grid metric-grid--three">
       <Metric eyebrow="Acumulado ene–ago 2026" value={integer.format(data.kpis.airportYtd)} change={pct(data.kpis.airportYtdYoY, true)} changeTone="negative" detail="vs. ene–ago 2025" icon={<Plane size={18} />} />
       <Metric eyebrow="Agosto 2026" value={integer.format(latest.pasajeros_totales_mes_actual)} change={pct(data.kpis.airportAugYoY, true)} changeTone="positive" detail="vs. agosto 2025" icon={<Gauge size={18} />} />
-      <Metric eyebrow="Internacional ene–ago" value={integer.format(latest.pasajeros_internacionales_acumulado_actual)} detail="OMA · pasajeros terminales" icon={<Users size={18} />} />
+      <Metric eyebrow="Internacional ene–ago" value={integer.format(data.kpis.airportInternationalYtd)} detail="OMA · pasajeros terminales" icon={<Users size={18} />} />
     </div>
     <Panel title="Serie mensual" subtitle="Comparación interanual con los valores reportados por OMA">
       <div className="segmented"><button className={series === 'total' ? 'active' : ''} onClick={() => setSeries('total')}>Total</button><button className={series === 'mix' ? 'active' : ''} onClick={() => setSeries('mix')}>Nacional / internacional</button></div>

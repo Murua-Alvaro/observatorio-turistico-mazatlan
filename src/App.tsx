@@ -1,5 +1,5 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
-import { Anchor, BedDouble, Building2, CalendarDays, CarFront, Database, Download, FileDown, Globe2, LayoutDashboard, Lightbulb, MapPin, Menu, Plane, RefreshCw, X } from 'lucide-react';
+import { Anchor, BedDouble, Building2, CarFront, ChevronDown, Database, Download, FileDown, Globe2, LayoutDashboard, Lightbulb, Menu, Plane, RefreshCw, Search, X } from 'lucide-react';
 import { data } from './data/model';
 import { downloadObservatoryCsv, printExecutiveReport, type ObservatoryYear } from './lib/export';
 
@@ -15,19 +15,28 @@ const Methodology = lazy(() => import('./pages/Methodology').then((m) => ({ defa
 
 export type ViewMode = 'monthly' | 'cumulative';
 type Tab = 'panorama' | 'business' | 'hotel' | 'airport' | 'cruises' | 'markets' | 'mobility' | 'insights' | 'methodology';
-type NavItem = { id: Tab; label: string; group: string; icon: typeof LayoutDashboard };
+type NavItem = { id: Tab; label: string; group: 'Análisis' | 'Sectores' | 'Datos'; icon: typeof LayoutDashboard };
 
 const nav: NavItem[] = [
-  { id: 'panorama', label: 'Resumen ejecutivo', group: 'Observatorio', icon: LayoutDashboard },
-  { id: 'insights', label: 'Centro de hallazgos', group: 'Observatorio', icon: Lightbulb },
-  { id: 'business', label: 'Empresas y comercio', group: 'Audiencias', icon: Building2 },
-  { id: 'hotel', label: 'Sector hotelero', group: 'Audiencias', icon: BedDouble },
-  { id: 'airport', label: 'Conectividad aérea', group: 'Indicadores', icon: Plane },
-  { id: 'cruises', label: 'Cruceros', group: 'Indicadores', icon: Anchor },
-  { id: 'markets', label: 'Mercados de origen', group: 'Indicadores', icon: Globe2 },
-  { id: 'mobility', label: 'Movilidad terrestre', group: 'Indicadores', icon: CarFront },
-  { id: 'methodology', label: 'Fuentes y metodología', group: 'Gobernanza', icon: Database },
+  { id: 'panorama', label: 'Panorama', group: 'Análisis', icon: LayoutDashboard },
+  { id: 'insights', label: 'Hallazgos y alertas', group: 'Análisis', icon: Lightbulb },
+  { id: 'business', label: 'Comercio y servicios', group: 'Sectores', icon: Building2 },
+  { id: 'hotel', label: 'Hotelería', group: 'Sectores', icon: BedDouble },
+  { id: 'airport', label: 'Aeropuerto', group: 'Datos', icon: Plane },
+  { id: 'cruises', label: 'Cruceros', group: 'Datos', icon: Anchor },
+  { id: 'markets', label: 'Mercados de origen', group: 'Datos', icon: Globe2 },
+  { id: 'mobility', label: 'Movilidad terrestre', group: 'Datos', icon: CarFront },
+  { id: 'methodology', label: 'Fuentes y metodología', group: 'Datos', icon: Database },
 ];
+
+const indicatorToTab: Record<string, Tab> = {
+  overview: 'panorama',
+  airport: 'airport',
+  hotel: 'hotel',
+  cruises: 'cruises',
+  markets: 'markets',
+  mobility: 'mobility',
+};
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('panorama');
@@ -42,6 +51,12 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const resetFilters = () => {
+    setYear(2026);
+    setViewMode('monthly');
+    setCompare(true);
+  };
+
   const pages = useMemo<Record<Tab, React.ReactNode>>(() => ({
     panorama: <Panorama year={year} viewMode={viewMode} compare={compare} onOpenAirport={() => open('airport')} onOpenBusiness={() => open('business')} onOpenHotel={() => open('hotel')} onOpenInsights={() => open('insights')} />,
     business: <Business year={year} viewMode={viewMode} compare={compare} onNavigate={open} />,
@@ -54,57 +69,75 @@ export default function App() {
     methodology: <Methodology />,
   }), [year, viewMode, compare]);
 
-  return <div className="app-shell app-shell--pro">
+  const activeIndicator = ['airport','hotel','cruises','markets','mobility'].includes(tab) ? tab : 'overview';
+  const activeAudience = tab === 'business' ? 'business' : tab === 'hotel' ? 'hotel' : 'overview';
+
+  return <div className="app-shell app-shell--explorer">
     <button className="mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Abrir navegación"><Menu size={20}/></button>
-    <aside className={`sidebar ${menuOpen ? 'sidebar--open' : ''}`}>
+
+    <aside className={`sidebar sidebar--explorer ${menuOpen ? 'sidebar--open' : ''}`}>
       <div className="sidebar__head">
-        <button className="brand brand--vertical" onClick={() => open('panorama')}>
+        <button className="brand" onClick={() => open('panorama')}>
           <span className="brand__mark">MZT</span>
           <span className="brand__text"><strong>Observatorio Turístico</strong><small>Mazatlán · Sinaloa</small></span>
         </button>
         <button className="sidebar__close" onClick={() => setMenuOpen(false)} aria-label="Cerrar navegación"><X size={18}/></button>
       </div>
 
-      <div className="sidebar__location"><MapPin size={14}/><span>Mazatlán, Sinaloa</span></div>
+      <div className="sidebar__search"><Search size={14}/><span>Explorar información</span></div>
 
-      <nav className="side-nav" aria-label="Secciones del observatorio">
-        {['Observatorio','Audiencias','Indicadores','Gobernanza'].map((group) => <div className="side-nav__group" key={group}>
-          <span className="side-nav__label">{group}</span>
-          {nav.filter((item) => item.group === group).map((item) => {
-            const Icon = item.icon;
-            return <button key={item.id} className={tab === item.id ? 'active' : ''} onClick={() => open(item.id)}><Icon size={17}/><span>{item.label}</span></button>;
-          })}
-        </div>)}
+      <nav className="side-nav side-nav--disclosure" aria-label="Secciones del observatorio">
+        {(['Análisis','Sectores','Datos'] as const).map((group) => <details className="nav-disclosure" key={group} open>
+          <summary><span>{group}</span><ChevronDown size={14}/></summary>
+          <div className="nav-disclosure__items">
+            {nav.filter((item) => item.group === group).map((item) => {
+              const Icon = item.icon;
+              return <button key={item.id} className={tab === item.id ? 'active' : ''} onClick={() => open(item.id)}><Icon size={16}/><span>{item.label}</span></button>;
+            })}
+          </div>
+        </details>)}
       </nav>
 
-      <div className="sidebar__foot">
+      <div className="sidebar__foot sidebar__foot--explorer">
         <div className="data-status"><span className="status-dot"/><div><strong>Datos auditados</strong><small>Corte {data.meta.cutoff}</small></div></div>
-        <span className="sidebar__micro">OMA · DataTur · SEMAR · SICT · INEGI. Las métricas conservan frecuencia y alcance de su fuente.</span>
+        <button onClick={() => open('methodology')}>Ver cobertura y fuentes</button>
       </div>
     </aside>
 
     {menuOpen ? <button className="sidebar-backdrop" onClick={() => setMenuOpen(false)} aria-label="Cerrar navegación"/> : null}
 
-    <div className="workspace">
-      <header className="workspace-bar workspace-bar--controls">
-        <div className="workspace-bar__title"><span>INTELIGENCIA TURÍSTICA</span><strong>{nav.find((item) => item.id === tab)?.label}</strong></div>
-        <div className="workspace-controls">
-          <div className="toolbar-cluster" aria-label="Año"><span>Año</span><div className="toolbar-segment"><button className={year === 2025 ? 'active' : ''} onClick={() => setYear(2025)}>2025</button><button className={year === 2026 ? 'active' : ''} onClick={() => setYear(2026)}>2026</button></div></div>
-          <div className="toolbar-cluster toolbar-cluster--view" aria-label="Vista"><span>Vista</span><div className="toolbar-segment"><button className={viewMode === 'monthly' ? 'active' : ''} onClick={() => setViewMode('monthly')}>Mensual</button><button className={viewMode === 'cumulative' ? 'active' : ''} onClick={() => setViewMode('cumulative')}>Acumulada</button></div></div>
-          <button className={`toolbar-button ${compare ? 'active' : ''}`} onClick={() => setCompare((v) => !v)} title="Activar o desactivar comparación interanual"><RefreshCw size={14}/> Comparar</button>
-          <button className="toolbar-button" onClick={() => downloadObservatoryCsv(year)}><Download size={14}/> CSV</button>
-          <button className="toolbar-button toolbar-button--primary" onClick={printExecutiveReport}><FileDown size={14}/> Reporte</button>
+    <div className="workspace workspace--explorer">
+      <header className="institution-bar">
+        <div><span>OBSERVATORIO TURÍSTICO DE MAZATLÁN</span><strong>{nav.find((item) => item.id === tab)?.label}</strong></div>
+        <div className="institution-bar__actions">
+          <button onClick={() => downloadObservatoryCsv(year)}><Download size={14}/> Descargar datos</button>
+          <button onClick={printExecutiveReport}><FileDown size={14}/> Imprimir / PDF</button>
         </div>
-        <div className="workspace-bar__meta"><CalendarDays size={15}/><span>Corte</span><strong>{data.meta.cutoff}</strong></div>
       </header>
 
-      <main className="workspace-main">
+      <section className="filter-bar" aria-label="Controles del explorador">
+        <label><span>Audiencia</span><select value={activeAudience} onChange={(e) => open(e.target.value === 'business' ? 'business' : e.target.value === 'hotel' ? 'hotel' : 'panorama')}><option value="overview">General</option><option value="business">Comercio y servicios</option><option value="hotel">Hotelería</option></select></label>
+        <label><span>Año</span><select value={year} onChange={(e) => setYear(Number(e.target.value) as ObservatoryYear)}><option value={2026}>2026</option><option value={2025}>2025</option></select></label>
+        <label><span>Frecuencia</span><select value={viewMode} onChange={(e) => setViewMode(e.target.value as ViewMode)}><option value="monthly">Mensual</option><option value="cumulative">Acumulada</option></select></label>
+        <label><span>Indicador</span><select value={activeIndicator} onChange={(e) => open(indicatorToTab[e.target.value] ?? 'panorama')}><option value="overview">Todos</option><option value="airport">Pasajeros aéreos</option><option value="hotel">Hotelería</option><option value="cruises">Cruceros</option><option value="markets">Mercados de origen</option><option value="mobility">Movilidad carretera</option></select></label>
+        <label><span>Comparación</span><select value={compare ? 'yoy' : 'none'} onChange={(e) => setCompare(e.target.value === 'yoy')}><option value="yoy">Mismo periodo anterior</option><option value="none">Sin comparación</option></select></label>
+        <button className="filter-reset" onClick={resetFilters}><RefreshCw size={14}/> Restablecer</button>
+      </section>
+
+      <div className="workspace-context">
+        <span>Periodo activo: <strong>{year}</strong></span>
+        <span>Vista: <strong>{viewMode === 'monthly' ? 'Mensual' : 'Acumulada'}</strong></span>
+        <span>Comparación: <strong>{compare ? 'Interanual' : 'Desactivada'}</strong></span>
+        <span>Actualización: <strong>{data.meta.cutoff}</strong></span>
+      </div>
+
+      <main className="workspace-main workspace-main--explorer">
         <Suspense fallback={<div className="loading-state"><span/>Cargando módulo analítico…</div>}>
           {pages[tab]}
         </Suspense>
       </main>
 
-      <footer className="pro-footer"><div><strong>Observatorio Turístico de Mazatlán</strong><span>Herramienta analítica para cámaras empresariales, hotelería y planeación sectorial.</span></div><button onClick={() => open('methodology')}>Trazabilidad y fuentes</button></footer>
+      <footer className="pro-footer"><div><strong>Observatorio Turístico de Mazatlán</strong><span>Datos oficiales organizados para análisis sectorial.</span></div><button onClick={() => open('methodology')}>Metodología y trazabilidad</button></footer>
     </div>
   </div>;
 }

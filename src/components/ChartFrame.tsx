@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
 
 export const tooltipStyle = {
-  background: '#071b1b',
-  border: '1px solid rgba(255,255,255,.12)',
-  borderRadius: 12,
-  color: '#f4f7f5',
-  boxShadow: '0 12px 38px rgba(0,0,0,.18)',
+  background: '#ffffff',
+  border: '1px solid #b8c2ca',
+  borderRadius: 2,
+  color: '#17212b',
+  boxShadow: '0 6px 18px rgba(24,36,48,.10)',
+  fontSize: 11,
 };
 
 export function ChartFrame({ children, large = false }: { children: ReactNode; large?: boolean }) {

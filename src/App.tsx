@@ -28,7 +28,18 @@ export default function App() {
   };
 
   const pages = useMemo<Record<Tab, React.ReactNode>>(() => ({
-    panorama: <Panorama year={year} viewMode={viewMode} compare={compare} onOpenAirport={() => open('airport')} onOpenBusiness={() => open('business')} onOpenHotel={() => open('hotel')} onOpenInsights={() => open('insights')} />,
+    panorama: <Panorama
+      year={year}
+      viewMode={viewMode}
+      compare={compare}
+      onYearChange={setYear}
+      onViewModeChange={setViewMode}
+      onCompareChange={setCompare}
+      onOpenAirport={() => open('airport')}
+      onOpenBusiness={() => open('business')}
+      onOpenHotel={() => open('hotel')}
+      onOpenInsights={() => open('insights')}
+    />,
     business: <Business year={year} viewMode={viewMode} compare={compare} onNavigate={open} />,
     hotel: <Hotel year={year} compare={compare} onNavigate={open} />,
     airport: <Airport year={year} viewMode={viewMode} compare={compare} />,
@@ -47,7 +58,7 @@ export default function App() {
       </button>
 
       <nav className="ti-nav" aria-label="Navegación principal">
-        <button className={tab === 'panorama' ? 'active' : ''} onClick={() => open('panorama')}>Panorama</button>
+        <button className={tab === 'panorama' ? 'active' : ''} onClick={() => open('panorama')}>Indicadores</button>
         <button className={tab === 'business' ? 'active' : ''} onClick={() => open('business')}>Empresas</button>
         <button className={tab === 'hotel' ? 'active' : ''} onClick={() => open('hotel')}>Hotelería</button>
         <details className="ti-menu">
@@ -69,14 +80,14 @@ export default function App() {
       </div>
     </header>
 
-    <div className="ti-contextbar">
+    {tab !== 'panorama' ? <div className="ti-contextbar">
       <div className="ti-contextbar__status"><span className="live-dot"/><strong>Base auditada</strong><span>Corte {data.meta.cutoff}</span></div>
       <div className="ti-contextbar__controls">
         <div className="control-cluster"><span>Año</span><button className={year === 2025 ? 'active' : ''} onClick={() => setYear(2025)}>2025</button><button className={year === 2026 ? 'active' : ''} onClick={() => setYear(2026)}>2026</button></div>
         <div className="control-cluster"><span>Lectura</span><button className={viewMode === 'monthly' ? 'active' : ''} onClick={() => setViewMode('monthly')}>Mensual</button><button className={viewMode === 'cumulative' ? 'active' : ''} onClick={() => setViewMode('cumulative')}>Acumulada</button></div>
         <label className="compare-switch"><input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)}/><span/>Comparar año previo</label>
       </div>
-    </div>
+    </div> : null}
 
     <main className="ti-main">
       <Suspense fallback={<div className="ti-loading">Cargando módulo de inteligencia…</div>}>{pages[tab]}</Suspense>

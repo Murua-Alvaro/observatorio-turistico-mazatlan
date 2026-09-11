@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
-import { airport, cruises, data, hotel } from '../data/model';
+import { useState } from 'react';
 import { integer, pct, pp } from '../lib/format';
 import type { ObservatoryYear } from '../lib/export';
+import { airportIntelligence, cruiseIntelligence, hotelIntelligence, marketIntelligence, roadIntelligence } from '../lib/intelligence';
 
 type Props = {
   year: ObservatoryYear;
@@ -12,48 +12,90 @@ type Audience = 'business' | 'hotel';
 
 export function Insights({ year, onNavigate }: Props) {
   const [audience, setAudience] = useState<Audience>('business');
-  const air = airport.filter((d: any) => d.periodo.startsWith(String(year)));
-  const airPrev = airport.filter((d: any) => d.periodo.startsWith(String(year - 1))).slice(0, air.length);
-  const hotelYear = hotel.filter((d: any) => d.periodo.startsWith(String(year)));
-  const cruisesYear = cruises.filter((d: any) => d.periodo.startsWith(String(year)));
-  const latestHotel = hotelYear.at(-1);
-  const latestCruise = cruisesYear.at(-1);
+  const air = airportIntelligence(year);
+  const hotel = hotelIntelligence(year);
+  const cruise = cruiseIntelligence(year);
+  const market = marketIntelligence(year);
+  const road = roadIntelligence();
 
-  const airYtd = air.reduce((sum: number, d: any) => sum + d.pasajeros_totales_mes_actual, 0);
-  const airPrevYtd = airPrev.reduce((sum: number, d: any) => sum + d.pasajeros_totales_mes_actual, 0);
-  const airYoy = airPrevYtd ? ((airYtd / airPrevYtd) - 1) * 100 : 0;
-
-  const sameCutPrevHotel = latestHotel ? hotel.find((d: any) => d.periodo === `${year - 1}-${latestHotel.periodo.slice(5)}`) : null;
-  const hotelDelta = sameCutPrevHotel && latestHotel ? latestHotel.ocupacion_pct - sameCutPrevHotel.ocupacion_pct : null;
-  const cruisePrev = latestCruise ? cruises.find((d: any) => d.periodo === `${year - 1}-${latestCruise.periodo.slice(5)}`) : null;
-  const cruiseYoy = cruisePrev && latestCruise ? ((latestCruise.pasajeros_acumulado_actual / cruisePrev.pasajeros_acumulado_actual) - 1) * 100 : null;
-
-  const countries = useMemo(() => data.nationality.countries.filter((d: any) => Number(d.anio) === year).sort((a: any, b: any) => b.valor_entradas - a.valor_entradas), [year]);
-  const foreignTotal = countries.reduce((sum: number, d: any) => sum + d.valor_entradas, 0);
-  const top2Share = foreignTotal ? countries.slice(0, 2).reduce((sum: number, d: any) => sum + d.valor_entradas, 0) / foreignTotal * 100 : 0;
-  const hotelFirst = hotelYear.at(0);
-  const capacityChange = hotelFirst && latestHotel ? ((latestHotel.cuartos_disponibles_promedio_diario / hotelFirst.cuartos_disponibles_promedio_diario) - 1) * 100 : 0;
-
-  const rows = [
-    { signal: airYoy >= 0 ? 'Mejora' : 'Atención', area: 'Conectividad aérea', evidence: `${pct(airYoy,true)} frente al tramo comparable`, implication: audience === 'business' ? 'Ajustar calendario comercial al ritmo de llegadas.' : 'Usar como contexto de demanda, no como noches-habitación.', action: 'Abrir aeropuerto', tab: 'airport' as const },
-    { signal: hotelDelta !== null && hotelDelta >= 0 ? 'Mejora' : 'Seguimiento', area: 'Hotelería', evidence: hotelDelta === null ? 'Sin corte comparable' : `${pp(hotelDelta)} frente al mismo corte`, implication: audience === 'business' ? 'Señal de actividad alojada; no equivale a ventas del comercio.' : `Leer junto con cambio de capacidad de ${pct(capacityChange,true)}.`, action: 'Abrir hotelería', tab: 'hotel' as const },
-    { signal: cruiseYoy !== null && cruiseYoy >= 0 ? 'Expansión' : 'Seguimiento', area: 'Cruceros', evidence: latestCruise ? `${integer.format(latestCruise.pasajeros_acumulado_actual)} pasajeros acumulados` : 'Sin datos', implication: audience === 'business' ? 'Relevante para comercio, tours y servicios de corta estancia.' : 'No debe sumarse a demanda hotelera.', action: 'Abrir cruceros', tab: 'cruises' as const },
-    { signal: top2Share >= 80 ? 'Concentración' : 'Diversificación', area: 'Mercados de origen', evidence: `${top2Share.toFixed(1)}% en los dos principales mercados`, implication: audience === 'business' ? 'Priorizar campañas y reducir dependencia de pocos mercados.' : 'Orientar promoción hotelera por mercado emisor.', action: 'Abrir mercados', tab: 'markets' as const },
+  const rows = audience === 'business' ? [
+    {
+      priority: air.recentTurnPositive ? 'Alta' : 'Media',
+      signal: 'Recuperación aérea reciente',
+      evidence: `${integer.format(air.total)} pasajeros; ${pct(air.yoy, true)} acumulado`,
+      implication: air.recentTurnPositive ? 'Los dos últimos meses disponibles son positivos interanualmente: preparar inventario, horarios y campañas sin asumir que el rezago anual ya desapareció.' : 'Todavía no hay una secuencia reciente suficientemente clara de recuperación.',
+      action: 'Abrir aeropuerto', tab: 'airport' as const,
+    },
+    {
+      priority: 'Alta',
+      signal: 'Crecimiento del crucerismo',
+      evidence: `${integer.format(cruise.latest?.pasajeros_acumulado_actual ?? 0)} pasajeros; ${cruise.passengerGrowth !== null ? pct(cruise.passengerGrowth, true) : '—'}`,
+      implication: `Los arribos cambian ${cruise.arrivalGrowth !== null ? pct(cruise.arrivalGrowth, true) : '—'} y la intensidad por escala ${cruise.intensityGrowth !== null ? pct(cruise.intensityGrowth, true) : '—'}. Relevante para comercio de corta estancia y tours.`,
+      action: 'Abrir cruceros', tab: 'cruises' as const,
+    },
+    {
+      priority: 'Alta',
+      signal: 'Dependencia de pocos mercados extranjeros',
+      evidence: `${market.top2Share.toFixed(1)}% concentrado en ${market.leader?.pais ?? '—'} y ${market.second?.pais ?? '—'}`,
+      implication: 'La segmentación comercial puede ser muy precisa, pero la dependencia aumenta la exposición a shocks de conectividad, percepción y poder adquisitivo en pocos mercados.',
+      action: 'Abrir mercados', tab: 'markets' as const,
+    },
+    {
+      priority: 'Media',
+      signal: 'Concentración carretera',
+      evidence: `${integer.format(road.max)} TDPA máximo; ${road.concentrationRatio.toFixed(1)}× la mediana`,
+      implication: 'Los principales corredores deben considerarse en logística, abasto y campañas dirigidas al visitante regional.',
+      action: 'Abrir comercio', tab: 'business' as const,
+    },
+  ] : [
+    {
+      priority: 'Alta',
+      signal: 'Ocupación mejora a corte equivalente',
+      evidence: hotel.occupancyDelta !== null ? `${hotel.latest?.ocupacion_pct ?? '—'}%; ${pp(hotel.occupancyDelta)} interanual` : 'Sin corte comparable',
+      implication: 'El desempeño hotelero mejora aun con una base de oferta mayor; debe leerse junto con capacidad y cuartos ocupados.',
+      action: 'Abrir hotelería', tab: 'hotel' as const,
+    },
+    {
+      priority: 'Alta',
+      signal: 'Absorción de nueva capacidad',
+      evidence: `${hotel.occupiedGrowth !== null ? pct(hotel.occupiedGrowth, true) : '—'} ocupados vs ${hotel.capacityGrowth !== null ? pct(hotel.capacityGrowth, true) : '—'} oferta`,
+      implication: hotel.absorptionSpread !== null && hotel.absorptionSpread > 0 ? `Los cuartos ocupados crecen ${hotel.absorptionSpread.toFixed(1)} pp más rápido que la capacidad. Es una señal operativa favorable.` : 'La capacidad está creciendo al mismo ritmo o más rápido que los cuartos ocupados; vigilar presión competitiva.',
+      action: 'Abrir hotelería', tab: 'hotel' as const,
+    },
+    {
+      priority: 'Media',
+      signal: 'Conectividad aún no recupera todo el acumulado',
+      evidence: `${integer.format(air.total)} pasajeros; ${pct(air.yoy, true)}`,
+      implication: air.recentTurnPositive ? 'La mejora de los últimos dos meses es una señal adelantada útil para reservas futuras, pero aún no borra el rezago acumulado.' : 'La conectividad sigue débil y puede limitar presión de demanda futura.',
+      action: 'Abrir aeropuerto', tab: 'airport' as const,
+    },
+    {
+      priority: 'Alta',
+      signal: 'Alta concentración internacional',
+      evidence: `${market.top2Share.toFixed(1)}% en dos mercados`,
+      implication: 'El hotelero debe vigilar promoción, conectividad y desempeño comercial de Canadá y Estados Unidos de forma diferenciada.',
+      action: 'Abrir mercados', tab: 'markets' as const,
+    },
   ];
 
-  return <section className="dataset-page">
-    <header className="dataset-heading">
-      <div><span>Análisis / hallazgos</span><h1>Registro de señales para decisión</h1><p>Una lectura editorial de los datos disponibles. Cada fila separa señal, evidencia e implicación operativa.</p></div>
-      <div className="dataset-heading__links"><button className={audience === 'business' ? 'active' : ''} onClick={() => setAudience('business')}>Empresas</button><button className={audience === 'hotel' ? 'active' : ''} onClick={() => setAudience('hotel')}>Hotelería</button></div>
+  return <section className="dataset-page brief-page">
+    <header className="dataset-heading dataset-heading--editorial">
+      <div><span>Brief ejecutivo · {year}</span><h1>Señales que requieren decisión</h1><p>Resumen priorizado para reuniones de cámaras empresariales, asociaciones hoteleras y equipos de planeación.</p></div>
+      <div className="audience-toggle"><button className={audience === 'business' ? 'active' : ''} onClick={() => setAudience('business')}>Comercio</button><button className={audience === 'hotel' ? 'active' : ''} onClick={() => setAudience('hotel')}>Hotelería</button></div>
     </header>
 
-    <div className="signal-register-table">
-      <div className="signal-register-table__head"><span>Señal</span><span>Área</span><span>Evidencia</span><span>Implicación</span><span></span></div>
-      {rows.map((row) => <div className="signal-register-table__row" key={row.area}><span><i className={`status ${row.signal === 'Atención' || row.signal === 'Concentración' ? 'warn' : row.signal === 'Seguimiento' ? 'neutral' : 'good'}`}>{row.signal}</i></span><strong>{row.area}</strong><span>{row.evidence}</span><p>{row.implication}</p><button onClick={() => onNavigate(row.tab)}>{row.action}</button></div>)}
-    </div>
+    <section className="brief-register">
+      <div className="brief-register__head"><span>Prioridad</span><span>Señal</span><span>Evidencia</span><span>Implicación</span><span></span></div>
+      {rows.map((row) => <div className="brief-register__row" key={row.signal}><span className={`priority priority--${row.priority.toLowerCase()}`}>{row.priority}</span><strong>{row.signal}</strong><b>{row.evidence}</b><p>{row.implication}</p><button onClick={() => onNavigate(row.tab)}>{row.action}</button></div>)}
+    </section>
 
-    <details className="dataset-disclosure" open><summary>Agenda prioritaria para {audience === 'business' ? 'cámaras y empresas' : 'operación hotelera'}</summary><div className="application-list">{audience === 'business' ? <><div><strong>Calendarizar campañas con el pulso de llegada</strong><p>Use meses fuertes y débiles como señal para promoción, horarios y abasto.</p></div><div><strong>Diversificar mercados</strong><p>La concentración top 2 es una exposición comercial que conviene monitorear.</p></div><div><strong>Separar cruceros de alojamiento</strong><p>El crucerista requiere una estrategia de consumo distinta a la del huésped.</p></div></> : <><div><strong>Comparar ocupación sólo a cortes equivalentes</strong><p>No promediar porcentajes acumulados como si fueran meses independientes.</p></div><div><strong>Leer ocupación junto con oferta</strong><p>El cambio de capacidad altera la interpretación del desempeño.</p></div><div><strong>Usar conectividad como contexto</strong><p>El aeropuerto ayuda a leer presión de demanda, no ventas de habitaciones.</p></div></>}</div></details>
+    <section className="brief-summary">
+      <div><span>Conectividad aérea</span><strong>{pct(air.yoy, true)}</strong><small>{air.positiveMonths}/{air.totalMonths} meses positivos</small></div>
+      <div><span>Ocupación hotelera</span><strong>{hotel.latest ? `${hotel.latest.ocupacion_pct}%` : '—'}</strong><small>{hotel.occupancyDelta !== null ? pp(hotel.occupancyDelta) : 'sin comparación'}</small></div>
+      <div><span>Cruceros</span><strong>{cruise.passengerGrowth !== null ? pct(cruise.passengerGrowth, true) : '—'}</strong><small>{cruise.latest ? integer.format(cruise.latest.pasajeros_acumulado_actual) : '—'} pasajeros</small></div>
+      <div><span>Concentración internacional</span><strong>{market.top2Share.toFixed(1)}%</strong><small>top 2 mercados</small></div>
+    </section>
 
-    <div className="method-note"><strong>Regla del observatorio</strong><span>No se convierten pasajeros, aforos o entradas migratorias en estimaciones no observadas de ventas, turistas únicos o derrama.</span></div>
+    <p className="method-footnote">Las señales no suman fuentes diferentes ni estiman turistas únicos, ventas o derrama no observada. Cada indicador conserva la definición de su fuente.</p>
   </section>;
 }

@@ -1,4 +1,4 @@
-import { Anchor, ArrowRight, Building2, CalendarDays, CarFront, Download, Globe2, Lightbulb, Plane } from 'lucide-react';
+import { useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChartFrame, tooltipStyle } from '../components/ChartFrame';
 import { airport, busiestRoads, cruises, data } from '../data/model';
@@ -13,7 +13,13 @@ type Props = {
   onNavigate: (tab: 'panorama' | 'business' | 'hotel' | 'airport' | 'cruises' | 'markets' | 'mobility' | 'insights' | 'methodology') => void;
 };
 
+type Analysis = 'seasonality' | 'markets' | 'mobility';
+type Display = 'chart' | 'table' | 'reading';
+
 export function Business({ year, viewMode, compare, onNavigate }: Props) {
+  const [analysis, setAnalysis] = useState<Analysis>('seasonality');
+  const [display, setDisplay] = useState<Display>('chart');
+
   const currentAir = airport.filter((d: any) => d.periodo.startsWith(String(year)));
   const previousAir = airport.filter((d: any) => d.periodo.startsWith(String(year - 1))).slice(0, currentAir.length);
   let running = 0;
@@ -22,63 +28,56 @@ export function Business({ year, viewMode, compare, onNavigate }: Props) {
     running += d.pasajeros_totales_mes_actual;
     const prev = previousAir[i];
     if (prev) runningPrev += prev.pasajeros_totales_mes_actual;
-    return { label: d.label, current: viewMode === 'monthly' ? d.pasajeros_totales_mes_actual : running, previous: prev ? (viewMode === 'monthly' ? prev.pasajeros_totales_mes_actual : runningPrev) : null };
+    return { ...d, current: viewMode === 'monthly' ? d.pasajeros_totales_mes_actual : running, previous: prev ? (viewMode === 'monthly' ? prev.pasajeros_totales_mes_actual : runningPrev) : null };
   });
-
   const airYtd = currentAir.reduce((s: number, d: any) => s + d.pasajeros_totales_mes_actual, 0);
   const prevAirYtd = previousAir.reduce((s: number, d: any) => s + d.pasajeros_totales_mes_actual, 0);
-  const airYoy = prevAirYtd ? ((airYtd / prevAirYtd) - 1) * 100 : currentAir.at(-1)?.yoy_total_pct ?? 0;
+  const airYoy = prevAirYtd ? ((airYtd / prevAirYtd) - 1) * 100 : 0;
+
   const cruiseYear = cruises.filter((d: any) => d.periodo.startsWith(String(year)));
   const latestCruise = cruiseYear.at(-1);
   const sameCruisePrev = latestCruise ? cruises.find((d: any) => d.periodo === `${year - 1}-${latestCruise.periodo.slice(5)}`) : null;
   const cruiseYoy = latestCruise && sameCruisePrev ? ((latestCruise.pasajeros_acumulado_actual / sameCruisePrev.pasajeros_acumulado_actual) - 1) * 100 : null;
+
   const countries = data.nationality.countries.filter((d: any) => Number(d.anio) === year).sort((a: any, b: any) => b.valor_entradas - a.valor_entradas);
   const foreignTotal = countries.reduce((s: number, d: any) => s + d.valor_entradas, 0);
   const topTwoShare = foreignTotal ? countries.slice(0, 2).reduce((s: number, d: any) => s + d.valor_entradas, 0) / foreignTotal * 100 : 0;
   const peakMonths = [...currentAir].sort((a: any, b: any) => b.pasajeros_totales_mes_actual - a.pasajeros_totales_mes_actual).slice(0, 3);
-  const weakMonths = [...currentAir].sort((a: any, b: any) => a.pasajeros_totales_mes_actual - b.pasajeros_totales_mes_actual).slice(0, 3);
 
-  return <>
-    <header className="page-intro">
-      <div><span className="page-kicker">COMERCIO Y SERVICIOS</span><h1>Inteligencia para cámaras empresariales</h1><p>Demanda, mercados, estacionalidad y accesibilidad organizados como una mesa de análisis. La intención es apoyar calendario comercial, promoción y coordinación sectorial.</p></div>
-      <div className="page-intro__actions"><button onClick={() => onNavigate('insights')}><Lightbulb size={15}/> Hallazgos</button><button onClick={() => onNavigate('markets')}><Globe2 size={15}/> Mercados</button><button onClick={() => downloadObservatoryCsv(year)}><Download size={15}/> CSV</button></div>
+  return <section className="dataset-page">
+    <header className="dataset-heading">
+      <div><span>Sector / comercio y servicios</span><h1>Demanda turística para decisión empresarial</h1><p>La vista está organizada por pregunta de negocio: estacionalidad, mercados de origen o accesibilidad. Cambie el análisis desde el desplegable.</p></div>
+      <div className="dataset-heading__links"><button onClick={() => onNavigate('insights')}>Hallazgos</button><button onClick={() => onNavigate('markets')}>Mercados</button><button onClick={() => downloadObservatoryCsv(year)}>Descargar CSV</button></div>
     </header>
 
-    <dl className="stat-strip">
-      <div><dt><Plane size={15}/> Llegada aérea</dt><dd>{integer.format(airYtd)}</dd><span className={airYoy >= 0 ? 'positive' : 'negative'}>{compare ? pct(airYoy, true) : year}</span></div>
-      <div><dt><Anchor size={15}/> Cruceros</dt><dd>{latestCruise ? integer.format(latestCruise.pasajeros_acumulado_actual) : '—'}</dd><span className={cruiseYoy !== null && cruiseYoy >= 0 ? 'positive' : cruiseYoy !== null ? 'negative' : ''}>{compare && cruiseYoy !== null ? pct(cruiseYoy, true) : 'último corte'}</span></div>
-      <div><dt><Globe2 size={15}/> Entradas extranjeras</dt><dd>{integer.format(foreignTotal)}</dd><span>UPM / DataTur</span></div>
-      <div><dt><Building2 size={15}/> Concentración top 2</dt><dd>{topTwoShare.toFixed(1)}%</dd><span>principales mercados</span></div>
-    </dl>
+    <div className="key-figures">
+      <div className="key-figures__head"><span>Indicador</span><span>Valor</span><span>Comparación</span><span>Uso</span></div>
+      <div className="key-figures__row"><strong>Llegada aérea</strong><b>{integer.format(airYtd)}</b><span className={airYoy >= 0 ? 'positive' : 'negative'}>{compare ? pct(airYoy,true) : '—'}</span><span>Ritmo de demanda</span></div>
+      <div className="key-figures__row"><strong>Pasajeros de crucero</strong><b>{latestCruise ? integer.format(latestCruise.pasajeros_acumulado_actual) : '—'}</b><span className={cruiseYoy !== null && cruiseYoy >= 0 ? 'positive' : 'negative'}>{compare && cruiseYoy !== null ? pct(cruiseYoy,true) : '—'}</span><span>Consumo de corta estancia</span></div>
+      <div className="key-figures__row"><strong>Entradas extranjeras</strong><b>{integer.format(foreignTotal)}</b><span>{topTwoShare.toFixed(1)}% top 2</span><span>Segmentación comercial</span></div>
+      <div className="key-figures__row"><strong>Mayor TDPA</strong><b>{integer.format(Math.max(...busiestRoads.map((d:any)=>d.tdpa)))}</b><span>vehículos/día</span><span>Accesibilidad y logística</span></div>
+    </div>
 
-    <details className="analysis-section" open>
-      <summary><div><span>01</span><strong>Actividad y estacionalidad</strong><small>Ritmo de demanda aérea para calendarización comercial</small></div></summary>
-      <div className="analysis-section__body analysis-grid">
-        <div className="analysis-chart"><ChartFrame large><ResponsiveContainer width="100%" height="100%"><BarChart data={airChart} margin={{ top: 12, right: 12, left: -8, bottom: 0 }}><CartesianGrid strokeDasharray="2 5" vertical={false} stroke="#d7ddd9"/><XAxis dataKey="label" tick={{ fontSize: 11, fill: '#626d68' }} tickLine={false} axisLine={false}/><YAxis tick={{ fontSize: 11, fill: '#626d68' }} tickLine={false} axisLine={false} tickFormatter={(v:any)=>`${Math.round(Number(v)/1000)}k`}/><Tooltip contentStyle={tooltipStyle} formatter={(v:any)=>integer.format(Number(v))}/>{compare && previousAir.length ? <Bar dataKey="previous" name={`${year - 1}`} fill="#c7ceca"/> : null}<Bar dataKey="current" name={`${year}`} fill="#0f6b5c"/></BarChart></ResponsiveContainer></ChartFrame></div>
-        <aside className="analysis-notes"><h3>Lectura comercial</h3><p>{airYoy >= 0 ? 'La conectividad del tramo comparable crece.' : 'El acumulado sigue debajo del año previo.'} La decisión útil no es “hay más o menos turistas”, sino identificar cuándo cambia la intensidad del flujo.</p><button onClick={() => onNavigate('airport')}>Abrir conectividad <ArrowRight size={13}/></button></aside>
+    <section className="data-browser">
+      <div className="data-browser__controls">
+        <label><span>Pregunta</span><select value={analysis} onChange={(e) => setAnalysis(e.target.value as Analysis)}><option value="seasonality">¿Cuándo aumenta la demanda?</option><option value="markets">¿De dónde viene el mercado?</option><option value="mobility">¿Qué corredores concentran flujo?</option></select></label>
+        <div className="display-tabs"><button className={display === 'chart' ? 'active' : ''} onClick={() => setDisplay('chart')}>Gráfica</button><button className={display === 'table' ? 'active' : ''} onClick={() => setDisplay('table')}>Tabla</button><button className={display === 'reading' ? 'active' : ''} onClick={() => setDisplay('reading')}>Interpretación</button></div>
+        <span className="data-browser__source">{analysis === 'seasonality' ? 'OMA' : analysis === 'markets' ? 'UPM / DataTur' : 'SICT'}</span>
       </div>
-      <div className="two-column-list">
-        <section><h3>Meses de mayor intensidad</h3>{peakMonths.map((d:any,i:number)=><div className="rank-row" key={d.periodo}><span>{i+1}</span><strong>{d.label}</strong><b>{integer.format(d.pasajeros_totales_mes_actual)}</b><small>{pct(d.yoy_total_pct, true)}</small></div>)}</section>
-        <section><h3>Meses de menor intensidad</h3>{weakMonths.map((d:any,i:number)=><div className="rank-row" key={d.periodo}><span>{i+1}</span><strong>{d.label}</strong><b>{integer.format(d.pasajeros_totales_mes_actual)}</b><small>{pct(d.yoy_total_pct, true)}</small></div>)}</section>
+
+      <div className="data-browser__display">
+        {display === 'chart' && analysis === 'seasonality' ? <ChartFrame large><ResponsiveContainer width="100%" height="100%"><BarChart data={airChart} margin={{top:16,right:20,left:-4,bottom:0}}><CartesianGrid strokeDasharray="2 4" vertical={false} stroke="#d8dee3"/><XAxis dataKey="label" tick={{fontSize:11,fill:'#5b6770'}} tickLine={false} axisLine={false}/><YAxis tick={{fontSize:11,fill:'#5b6770'}} tickLine={false} axisLine={false} tickFormatter={(v:any)=>`${Math.round(Number(v)/1000)}k`}/><Tooltip contentStyle={tooltipStyle} formatter={(v:any)=>integer.format(Number(v))}/>{compare ? <Bar dataKey="previous" name={`${year-1}`} fill="#b9c2ca"/> : null}<Bar dataKey="current" name={`${year}`} fill="#1769aa"/></BarChart></ResponsiveContainer></ChartFrame> : null}
+
+        {display === 'chart' && analysis === 'markets' ? <div className="horizontal-ranking">{countries.slice(0,10).map((d:any,i:number)=><div key={d.pais}><span>{String(i+1).padStart(2,'0')}</span><strong>{d.pais}</strong><div className="horizontal-ranking__bar"><i style={{width:`${Math.max(2,d.valor_entradas/(countries[0]?.valor_entradas || 1)*100)}%`}}/></div><b>{integer.format(d.valor_entradas)}</b></div>)}</div> : null}
+
+        {display === 'chart' && analysis === 'mobility' ? <ChartFrame large><ResponsiveContainer width="100%" height="100%"><BarChart data={busiestRoads.slice(0,8)} layout="vertical" margin={{top:12,right:20,left:30,bottom:0}}><CartesianGrid strokeDasharray="2 4" horizontal={false} stroke="#d8dee3"/><XAxis type="number" tick={{fontSize:11,fill:'#5b6770'}} tickLine={false} axisLine={false}/><YAxis type="category" dataKey="estacion" width={160} tick={{fontSize:10,fill:'#5b6770'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={tooltipStyle} formatter={(v:any)=>integer.format(Number(v))}/><Bar dataKey="tdpa" name="TDPA" fill="#1769aa"/></BarChart></ResponsiveContainer></ChartFrame> : null}
+
+        {display === 'table' ? <div className="table-wrap explorer-table"><table><thead><tr>{analysis === 'seasonality' ? <><th>Periodo</th><th>Pasajeros</th><th>Var. anual</th></> : analysis === 'markets' ? <><th>Pos.</th><th>País</th><th>Entradas</th><th>Participación relativa</th></> : <><th>Estación</th><th>Carretera</th><th>TDPA</th></>}</tr></thead><tbody>{analysis === 'seasonality' ? currentAir.map((d:any)=><tr key={d.periodo}><td>{d.periodo}</td><td>{integer.format(d.pasajeros_totales_mes_actual)}</td><td className={d.yoy_total_pct>=0?'positive':'negative'}>{pct(d.yoy_total_pct,true)}</td></tr>) : analysis === 'markets' ? countries.slice(0,15).map((d:any,i:number)=><tr key={d.pais}><td>{i+1}</td><td>{d.pais}</td><td>{integer.format(d.valor_entradas)}</td><td>{foreignTotal ? `${(d.valor_entradas/foreignTotal*100).toFixed(1)}%` : '—'}</td></tr>) : busiestRoads.map((d:any)=><tr key={`${d.estacion}-${d.tdpa}`}><td>{d.estacion}</td><td>{d.carretera}</td><td>{integer.format(d.tdpa)}</td></tr>)}</tbody></table></div> : null}
+
+        {display === 'reading' ? <div className="reading-pane"><h2>{analysis === 'seasonality' ? 'Lectura de estacionalidad' : analysis === 'markets' ? 'Lectura de mercados' : 'Lectura de accesibilidad'}</h2><p>{analysis === 'seasonality' ? `El tramo disponible cambia ${pct(airYoy,true)} frente al año anterior. Los meses de mayor intensidad son ${peakMonths.map((d:any)=>d.label).join(', ')}. Úselo para calendarizar promociones, inventario y personal; no equivale a ventas observadas.` : analysis === 'markets' ? `Los dos principales mercados representan ${topTwoShare.toFixed(1)}% de las entradas extranjeras registradas. La concentración facilita segmentación, pero también expone al destino a pocos mercados.` : 'Los aforos SICT son contexto de movilidad y logística. No cuentan turistas y no deben sumarse con aeropuerto o cruceros.'}</p><dl><div><dt>Decisión apoyada</dt><dd>{analysis === 'seasonality' ? 'Calendario comercial' : analysis === 'markets' ? 'Promoción por mercado' : 'Logística y accesibilidad'}</dd></div><div><dt>Fuente</dt><dd>{analysis === 'seasonality' ? 'OMA' : analysis === 'markets' ? 'UPM / DataTur' : 'SICT'}</dd></div></dl></div> : null}
       </div>
-    </details>
+    </section>
 
-    <details className="analysis-section" open>
-      <summary><div><span>02</span><strong>Mercados prioritarios</strong><small>Origen internacional y concentración</small></div><button className="summary-action" onClick={(e) => { e.preventDefault(); onNavigate('markets'); }}>Explorar mercados</button></summary>
-      <div className="analysis-section__body">
-        <div className="market-table"><div className="market-table__head"><span>Pos.</span><span>País</span><span>Entradas</span><span>Participación relativa</span></div>{countries.slice(0,10).map((d:any,i:number)=><div className="market-table__row" key={d.pais}><span>{String(i+1).padStart(2,'0')}</span><strong>{d.pais}</strong><b>{integer.format(d.valor_entradas)}</b><div className="market-meter"><i style={{width:`${Math.max(3,d.valor_entradas/(countries[0]?.valor_entradas || 1)*100)}%`}}/></div></div>)}</div>
-        <p className="section-caption">Los dos principales mercados concentran {topTwoShare.toFixed(1)}% de las entradas registradas en {year}. Es una señal útil para promoción y también una exposición a pocos mercados.</p>
-      </div>
-    </details>
-
-    <details className="analysis-section">
-      <summary><div><span>03</span><strong>Accesibilidad terrestre</strong><small>Aforos SICT vinculados con Mazatlán</small></div><button className="summary-action" onClick={(e) => { e.preventDefault(); onNavigate('mobility'); }}>Ver movilidad</button></summary>
-      <div className="analysis-section__body"><div className="plain-table"><div className="plain-table__head"><span>Estación</span><span>Carretera</span><span>TDPA</span></div>{busiestRoads.slice(0,8).map((d:any)=><div className="plain-table__row" key={`${d.estacion}-${d.tdpa}`}><strong>{d.estacion}</strong><span>{d.carretera}</span><b>{integer.format(d.tdpa)}</b></div>)}</div><p className="section-caption"><CarFront size={14}/> Los aforos aproximan intensidad de movilidad y logística; no cuentan turistas.</p></div>
-    </details>
-
-    <details className="analysis-section">
-      <summary><div><span>04</span><strong>Aplicaciones para cámaras empresariales</strong><small>Preguntas que la plataforma ya puede responder</small></div></summary>
-      <div className="analysis-section__body"><div className="question-list"><div><CalendarDays size={15}/><strong>¿Cuándo aumenta la presión de demanda?</strong><p>Use los meses de mayor intensidad para coordinar horarios, inventario, promoción y personal.</p></div><div><Globe2 size={15}/><strong>¿Qué mercados requieren promoción específica?</strong><p>Use el ranking internacional y su concentración para priorizar campañas y alianzas.</p></div><div><CarFront size={15}/><strong>¿Qué corredores importan para accesibilidad?</strong><p>Use TDPA como contexto de movilidad regional y abastecimiento.</p></div></div></div>
-    </details>
-  </>;
+    <details className="dataset-disclosure" open><summary>Aplicaciones para cámaras empresariales</summary><div className="application-list"><div><strong>Planeación de temporada</strong><p>Sincronizar horarios, inventario y campañas con los meses de mayor intensidad.</p></div><div><strong>Promoción por mercado</strong><p>Priorizar países por volumen y concentración de entradas.</p></div><div><strong>Seguimiento de accesibilidad</strong><p>Usar TDPA como contexto de flujo regional y abastecimiento.</p></div></div></details>
+  </section>;
 }

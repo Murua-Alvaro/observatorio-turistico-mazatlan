@@ -1,7 +1,6 @@
-import { Anchor, ArrowRight, BedDouble, Building2, Lightbulb, Plane, Users } from 'lucide-react';
-import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { useState } from 'react';
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChartFrame, tooltipStyle } from '../components/ChartFrame';
-import { SourceNote } from '../components/SourceNote';
 import { airport, cruises, data, hotel } from '../data/model';
 import { integer, pct, pp } from '../lib/format';
 import type { ObservatoryYear } from '../lib/export';
@@ -17,7 +16,13 @@ type Props = {
   onOpenInsights: () => void;
 };
 
+type Display = 'chart' | 'table' | 'reading';
+type Series = 'airport' | 'hotel' | 'cruises' | 'markets';
+
 export function Panorama({ year, viewMode, compare, onOpenAirport, onOpenBusiness, onOpenHotel, onOpenInsights }: Props) {
+  const [display, setDisplay] = useState<Display>('chart');
+  const [series, setSeries] = useState<Series>('airport');
+
   const currentAir = airport.filter((d: any) => d.periodo.startsWith(String(year)));
   const previousAir = airport.filter((d: any) => d.periodo.startsWith(String(year - 1))).slice(0, currentAir.length);
   let running = 0;
@@ -26,62 +31,63 @@ export function Panorama({ year, viewMode, compare, onOpenAirport, onOpenBusines
     running += d.pasajeros_totales_mes_actual;
     const prev = previousAir[i];
     if (prev) runningPrev += prev.pasajeros_totales_mes_actual;
-    return { label: d.label, current: viewMode === 'monthly' ? d.pasajeros_totales_mes_actual : running, previous: prev ? (viewMode === 'monthly' ? prev.pasajeros_totales_mes_actual : runningPrev) : null };
+    return { ...d, current: viewMode === 'monthly' ? d.pasajeros_totales_mes_actual : running, previous: prev ? (viewMode === 'monthly' ? prev.pasajeros_totales_mes_actual : runningPrev) : null };
   });
-
   const airYtd = currentAir.reduce((s: number, d: any) => s + d.pasajeros_totales_mes_actual, 0);
   const prevAirYtd = previousAir.reduce((s: number, d: any) => s + d.pasajeros_totales_mes_actual, 0);
-  const airYoy = prevAirYtd ? ((airYtd / prevAirYtd) - 1) * 100 : currentAir.at(-1)?.yoy_total_pct ?? 0;
+  const airYoy = prevAirYtd ? ((airYtd / prevAirYtd) - 1) * 100 : 0;
 
   const hotelYear = hotel.filter((d: any) => d.periodo.startsWith(String(year)));
   const latestHotel = hotelYear.at(-1);
   const sameCutHotel = latestHotel ? hotel.find((d: any) => d.periodo === `${year - 1}-${latestHotel.periodo.slice(5)}`) : null;
   const hotelDelta = latestHotel && sameCutHotel ? latestHotel.ocupacion_pct - sameCutHotel.ocupacion_pct : null;
 
-  const cruisesYear = cruises.filter((d: any) => d.periodo.startsWith(String(year)));
-  const latestCruise = cruisesYear.at(-1);
+  const cruiseYear = cruises.filter((d: any) => d.periodo.startsWith(String(year)));
+  const latestCruise = cruiseYear.at(-1);
   const sameCutCruise = latestCruise ? cruises.find((d: any) => d.periodo === `${year - 1}-${latestCruise.periodo.slice(5)}`) : null;
   const cruiseYoy = latestCruise && sameCutCruise ? ((latestCruise.pasajeros_acumulado_actual / sameCutCruise.pasajeros_acumulado_actual) - 1) * 100 : null;
-  const foreignEntries = data.nationality.monthly.filter((d: any) => Number(d.anio) === year).reduce((s: number, d: any) => s + d.valor_entradas, 0);
 
-  return <>
-    <header className="page-intro">
-      <div><span className="page-kicker">PANORAMA GENERAL</span><h1>Actividad turística de Mazatlán</h1><p>Una lectura ejecutiva de conectividad, alojamiento, cruceros y mercados. Cada fuente mantiene su propia escala para evitar sumar poblaciones que no son equivalentes.</p></div>
-      <div className="page-intro__actions"><button onClick={onOpenBusiness}><Building2 size={15}/> Comercio</button><button onClick={onOpenHotel}><BedDouble size={15}/> Hotelería</button><button onClick={onOpenInsights}><Lightbulb size={15}/> Hallazgos</button></div>
+  const marketMonthly = data.nationality.monthly.filter((d: any) => Number(d.anio) === year);
+  const foreignEntries = marketMonthly.reduce((s: number, d: any) => s + d.valor_entradas, 0);
+
+  return <section className="dataset-page">
+    <header className="dataset-heading">
+      <div><span>Panorama general</span><h1>Actividad turística de Mazatlán</h1><p>Seleccione un conjunto de datos y cambie entre gráfica, tabla e interpretación. Las fuentes permanecen separadas porque miden poblaciones distintas.</p></div>
+      <div className="dataset-heading__links"><button onClick={onOpenBusiness}>Comercio y servicios</button><button onClick={onOpenHotel}>Hotelería</button><button onClick={onOpenInsights}>Hallazgos</button></div>
     </header>
 
-    <dl className="stat-strip">
-      <div><dt><Plane size={15}/> Pasajeros aéreos</dt><dd>{integer.format(airYtd)}</dd><span className={airYoy >= 0 ? 'positive' : 'negative'}>{compare ? pct(airYoy, true) : `Año ${year}`}</span></div>
-      <div><dt><BedDouble size={15}/> Ocupación hotelera</dt><dd>{latestHotel ? `${latestHotel.ocupacion_pct}%` : '—'}</dd><span className={hotelDelta !== null && hotelDelta >= 0 ? 'positive' : hotelDelta !== null ? 'negative' : ''}>{compare && hotelDelta !== null ? pp(hotelDelta) : latestHotel?.periodo ?? '—'}</span></div>
-      <div><dt><Anchor size={15}/> Cruceros</dt><dd>{latestCruise ? integer.format(latestCruise.pasajeros_acumulado_actual) : '—'}</dd><span className={cruiseYoy !== null && cruiseYoy >= 0 ? 'positive' : cruiseYoy !== null ? 'negative' : ''}>{compare && cruiseYoy !== null ? pct(cruiseYoy, true) : latestCruise?.periodo ?? '—'}</span></div>
-      <div><dt><Users size={15}/> Entradas extranjeras</dt><dd>{integer.format(foreignEntries)}</dd><span>UPM / DataTur · {year}</span></div>
-    </dl>
+    <div className="key-figures" role="table" aria-label="Indicadores seleccionados">
+      <div className="key-figures__head"><span>Indicador</span><span>Último valor / acumulado</span><span>Comparación</span><span>Fuente</span></div>
+      <div className="key-figures__row"><strong>Pasajeros aéreos</strong><b>{integer.format(airYtd)}</b><span className={airYoy >= 0 ? 'positive' : 'negative'}>{compare ? pct(airYoy, true) : '—'}</span><span>OMA</span></div>
+      <div className="key-figures__row"><strong>Ocupación hotelera</strong><b>{latestHotel ? `${latestHotel.ocupacion_pct}%` : '—'}</b><span className={hotelDelta !== null && hotelDelta >= 0 ? 'positive' : 'negative'}>{compare && hotelDelta !== null ? pp(hotelDelta) : '—'}</span><span>DataTur</span></div>
+      <div className="key-figures__row"><strong>Pasajeros de crucero</strong><b>{latestCruise ? integer.format(latestCruise.pasajeros_acumulado_actual) : '—'}</b><span className={cruiseYoy !== null && cruiseYoy >= 0 ? 'positive' : 'negative'}>{compare && cruiseYoy !== null ? pct(cruiseYoy, true) : '—'}</span><span>DataTur / SEMAR</span></div>
+      <div className="key-figures__row"><strong>Entradas extranjeras</strong><b>{integer.format(foreignEntries)}</b><span>Acumulado disponible</span><span>UPM / DataTur</span></div>
+    </div>
 
-    <details className="analysis-section" open>
-      <summary><div><span>01</span><strong>Señales para decisión</strong><small>Qué cambió y qué requiere atención</small></div></summary>
-      <div className="analysis-section__body">
-        <div className="signal-table">
-          <div><span className={airYoy >= 0 ? 'signal-status good' : 'signal-status alert'}>{airYoy >= 0 ? 'Mejora' : 'Atención'}</span><strong>Conectividad aérea</strong><p>{pct(airYoy, true)} frente al tramo comparable. El acumulado y el último mes deben leerse por separado.</p><button onClick={onOpenAirport}>Abrir aeropuerto <ArrowRight size={13}/></button></div>
-          <div><span className={hotelDelta !== null && hotelDelta >= 0 ? 'signal-status good' : 'signal-status neutral'}>{hotelDelta !== null && hotelDelta >= 0 ? 'Mejora' : 'Seguimiento'}</span><strong>Hotelería</strong><p>{hotelDelta === null ? 'No hay corte comparable previo.' : `${pp(hotelDelta)} en ocupación frente al mismo corte.`}</p><button onClick={onOpenHotel}>Abrir hotelería <ArrowRight size={13}/></button></div>
-          <div><span className={cruiseYoy !== null && cruiseYoy >= 0 ? 'signal-status good' : 'signal-status neutral'}>{cruiseYoy !== null && cruiseYoy >= 0 ? 'Expansión' : 'Seguimiento'}</span><strong>Cruceros</strong><p>{cruiseYoy === null ? 'Sin comparación equivalente.' : `${pct(cruiseYoy, true)} en pasajeros acumulados al corte.`}</p><button onClick={onOpenInsights}>Ver implicaciones <ArrowRight size={13}/></button></div>
-        </div>
+    <section className="data-browser">
+      <div className="data-browser__controls">
+        <label><span>Serie</span><select value={series} onChange={(e) => setSeries(e.target.value as Series)}><option value="airport">Pasajeros aéreos</option><option value="hotel">Ocupación hotelera</option><option value="cruises">Cruceros</option><option value="markets">Entradas extranjeras</option></select></label>
+        <div className="display-tabs" role="tablist"><button className={display === 'chart' ? 'active' : ''} onClick={() => setDisplay('chart')}>Gráfica</button><button className={display === 'table' ? 'active' : ''} onClick={() => setDisplay('table')}>Tabla</button><button className={display === 'reading' ? 'active' : ''} onClick={() => setDisplay('reading')}>Interpretación</button></div>
+        <span className="data-browser__source">{series === 'airport' ? data.meta.coverage.airport : series === 'hotel' ? data.meta.coverage.hotelMonthly : series === 'cruises' ? data.meta.coverage.cruises : data.meta.coverage.nationality}</span>
       </div>
-    </details>
 
-    <details className="analysis-section" open>
-      <summary><div><span>02</span><strong>Conectividad aérea</strong><small>{viewMode === 'monthly' ? 'Serie mensual' : 'Serie acumulada'} · OMA</small></div><button className="summary-action" onClick={(e) => { e.preventDefault(); onOpenAirport(); }}>Ver módulo</button></summary>
-      <div className="analysis-section__body analysis-grid">
-        <div className="analysis-chart"><ChartFrame large><ResponsiveContainer width="100%" height="100%"><AreaChart data={airChart} margin={{ top: 12, right: 16, left: -8, bottom: 0 }}><CartesianGrid strokeDasharray="2 5" vertical={false} stroke="#d7ddd9"/><XAxis dataKey="label" tick={{ fontSize: 11, fill: '#626d68' }} tickLine={false} axisLine={false}/><YAxis tick={{ fontSize: 11, fill: '#626d68' }} tickLine={false} axisLine={false} tickFormatter={(v:any)=>`${Math.round(Number(v)/1000)}k`}/><Tooltip contentStyle={tooltipStyle} formatter={(v:any)=>integer.format(Number(v))}/>{compare && previousAir.length ? <Area type="monotone" dataKey="previous" name={`${year - 1}`} stroke="#9ca6a1" strokeWidth={1.4} fill="transparent" strokeDasharray="5 4"/> : null}<Area type="monotone" dataKey="current" name={`${year}`} stroke="#0f6b5c" strokeWidth={2.4} fill="#dce9e5"/></AreaChart></ResponsiveContainer></ChartFrame></div>
-        <aside className="analysis-notes"><h3>Cómo leerlo</h3><p>Esta serie muestra pasajeros terminales, no turistas alojados. Es útil para medir intensidad de conectividad y cambios de corto plazo.</p><dl><div><dt>Fuente</dt><dd>OMA</dd></div><div><dt>Cobertura</dt><dd>{data.meta.coverage.airport}</dd></div><div><dt>Comparación</dt><dd>{compare ? `${year} vs ${year - 1}` : 'Desactivada'}</dd></div></dl></aside>
-      </div>
-    </details>
+      <div className="data-browser__display">
+        {display === 'chart' && series === 'airport' ? <ChartFrame large><ResponsiveContainer width="100%" height="100%"><AreaChart data={airChart} margin={{top:16,right:20,left:-4,bottom:0}}><CartesianGrid strokeDasharray="2 4" vertical={false} stroke="#d8dee3"/><XAxis dataKey="label" tick={{fontSize:11,fill:'#5b6770'}} tickLine={false} axisLine={false}/><YAxis tick={{fontSize:11,fill:'#5b6770'}} tickLine={false} axisLine={false} tickFormatter={(v:any)=>`${Math.round(Number(v)/1000)}k`}/><Tooltip contentStyle={tooltipStyle} formatter={(v:any)=>integer.format(Number(v))}/>{compare ? <Area type="monotone" dataKey="previous" name={`${year-1}`} stroke="#87929b" strokeDasharray="5 4" fill="transparent"/> : null}<Area type="monotone" dataKey="current" name={`${year}`} stroke="#1769aa" strokeWidth={2.5} fill="#e7f0f8"/></AreaChart></ResponsiveContainer></ChartFrame> : null}
+        {display === 'chart' && series === 'hotel' ? <ChartFrame large><ResponsiveContainer width="100%" height="100%"><LineChart data={hotelYear} margin={{top:16,right:20,left:-4,bottom:0}}><CartesianGrid strokeDasharray="2 4" vertical={false} stroke="#d8dee3"/><XAxis dataKey="label" tick={{fontSize:11,fill:'#5b6770'}} tickLine={false} axisLine={false}/><YAxis domain={[30,70]} tickFormatter={(v:any)=>`${v}%`} tick={{fontSize:11,fill:'#5b6770'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={tooltipStyle} formatter={(v:any)=>`${v}%`}/><Line type="monotone" dataKey="ocupacion_pct" name="Ocupación acumulada" stroke="#1769aa" strokeWidth={2.5} dot={{r:2}}/></LineChart></ResponsiveContainer></ChartFrame> : null}
+        {display === 'chart' && series === 'cruises' ? <ChartFrame large><ResponsiveContainer width="100%" height="100%"><BarChart data={cruiseYear} margin={{top:16,right:20,left:-4,bottom:0}}><CartesianGrid strokeDasharray="2 4" vertical={false} stroke="#d8dee3"/><XAxis dataKey="label" tick={{fontSize:11,fill:'#5b6770'}} tickLine={false} axisLine={false}/><YAxis tick={{fontSize:11,fill:'#5b6770'}} tickLine={false} axisLine={false} tickFormatter={(v:any)=>`${Math.round(Number(v)/1000)}k`}/><Tooltip contentStyle={tooltipStyle} formatter={(v:any)=>integer.format(Number(v))}/><Bar dataKey="pasajeros_mes_actual" name="Pasajeros" fill="#1769aa"/></BarChart></ResponsiveContainer></ChartFrame> : null}
+        {display === 'chart' && series === 'markets' ? <ChartFrame large><ResponsiveContainer width="100%" height="100%"><AreaChart data={marketMonthly} margin={{top:16,right:20,left:-4,bottom:0}}><CartesianGrid strokeDasharray="2 4" vertical={false} stroke="#d8dee3"/><XAxis dataKey="fecha" tickFormatter={(v:any)=>String(v).slice(5,7)} tick={{fontSize:11,fill:'#5b6770'}} tickLine={false} axisLine={false}/><YAxis tick={{fontSize:11,fill:'#5b6770'}} tickLine={false} axisLine={false} tickFormatter={(v:any)=>`${Math.round(Number(v)/1000)}k`}/><Tooltip contentStyle={tooltipStyle} formatter={(v:any)=>integer.format(Number(v))}/><Area type="monotone" dataKey="valor_entradas" name="Entradas" stroke="#1769aa" strokeWidth={2.5} fill="#e7f0f8"/></AreaChart></ResponsiveContainer></ChartFrame> : null}
 
-    <details className="analysis-section">
-      <summary><div><span>03</span><strong>Hotelería formal</strong><small>Cortes acumulados al mes · DataTur</small></div></summary>
-      <div className="analysis-section__body analysis-grid">
-        <div className="analysis-chart"><ChartFrame><ResponsiveContainer width="100%" height="100%"><LineChart data={hotelYear} margin={{ top: 8, right: 10, left: -14, bottom: 0 }}><CartesianGrid strokeDasharray="2 5" vertical={false} stroke="#d7ddd9"/><XAxis dataKey="label" tick={{ fontSize: 10, fill: '#626d68' }} tickLine={false} axisLine={false}/><YAxis domain={[30,70]} tick={{ fontSize: 10, fill: '#626d68' }} tickLine={false} axisLine={false} tickFormatter={(v:any)=>`${v}%`}/><Tooltip contentStyle={tooltipStyle} formatter={(v:any)=>`${v}%`}/><Line type="monotone" dataKey="ocupacion_pct" name="Ocupación acumulada" stroke="#2d5e88" strokeWidth={2.2} dot={false}/></LineChart></ResponsiveContainer></ChartFrame><SourceNote source="Regla" note="Cada punto corresponde a un corte acumulado; no es una tasa mensual independiente." /></div>
-        <aside className="analysis-notes"><h3>Pregunta que responde</h3><p>¿Cómo evoluciona el desempeño hotelero cuando se compara el mismo corte del año anterior?</p><button onClick={onOpenHotel}>Abrir análisis hotelero <ArrowRight size={13}/></button></aside>
+        {display === 'table' ? <div className="table-wrap explorer-table"><table><thead><tr>{series === 'airport' ? <><th>Periodo</th><th>Total</th><th>Nacional</th><th>Internacional</th><th>Var. anual</th></> : series === 'hotel' ? <><th>Periodo</th><th>Disponibles</th><th>Ocupados</th><th>Ocupación</th></> : series === 'cruises' ? <><th>Periodo</th><th>Pasajeros mes</th><th>Acumulado</th><th>Arribos acum.</th></> : <><th>Periodo</th><th>Entradas</th></>}</tr></thead><tbody>
+          {series === 'airport' ? currentAir.map((d:any)=><tr key={d.periodo}><td>{d.periodo}</td><td>{integer.format(d.pasajeros_totales_mes_actual)}</td><td>{integer.format(d.pasajeros_nacionales_mes_actual)}</td><td>{integer.format(d.pasajeros_internacionales_mes_actual)}</td><td className={d.yoy_total_pct >= 0 ? 'positive' : 'negative'}>{pct(d.yoy_total_pct,true)}</td></tr>) : null}
+          {series === 'hotel' ? hotelYear.map((d:any)=><tr key={d.periodo}><td>{d.periodo}</td><td>{integer.format(d.cuartos_disponibles_promedio_diario)}</td><td>{integer.format(d.cuartos_ocupados)}</td><td>{d.ocupacion_pct}%</td></tr>) : null}
+          {series === 'cruises' ? cruiseYear.map((d:any)=><tr key={d.periodo}><td>{d.periodo}</td><td>{integer.format(d.pasajeros_mes_actual)}</td><td>{integer.format(d.pasajeros_acumulado_actual)}</td><td>{integer.format(d.arribos_acumulado_actual)}</td></tr>) : null}
+          {series === 'markets' ? marketMonthly.map((d:any)=><tr key={d.fecha}><td>{d.fecha.slice(0,7)}</td><td>{integer.format(d.valor_entradas)}</td></tr>) : null}
+        </tbody></table></div> : null}
+
+        {display === 'reading' ? <div className="reading-pane"><h2>{series === 'airport' ? 'Conectividad aérea' : series === 'hotel' ? 'Hotelería formal' : series === 'cruises' ? 'Turismo marítimo' : 'Mercados internacionales'}</h2><p>{series === 'airport' ? `El acumulado del tramo disponible cambia ${pct(airYoy,true)} frente al año anterior. Pasajeros terminales no equivalen a huéspedes.` : series === 'hotel' ? `El último corte reporta ${latestHotel?.ocupacion_pct ?? '—'}% de ocupación. Los cortes son acumulados al mes y se comparan con el mismo corte.` : series === 'cruises' ? `${latestCruise ? integer.format(latestCruise.pasajeros_acumulado_actual) : '—'} pasajeros acumulados al último corte. El crucerista no debe mezclarse con demanda hotelera.` : `${integer.format(foreignEntries)} entradas extranjeras registradas en el periodo disponible. La nacionalidad sirve para promoción y segmentación.`}</p><dl><div><dt>Unidad</dt><dd>{series === 'hotel' ? 'Porcentaje / cuartos' : series === 'markets' ? 'Entradas registradas' : 'Pasajeros'}</dd></div><div><dt>Fuente</dt><dd>{series === 'airport' ? 'OMA' : series === 'hotel' ? 'DataTur' : series === 'cruises' ? 'DataTur / SEMAR' : 'UPM / DataTur'}</dd></div><div><dt>Uso recomendado</dt><dd>{series === 'hotel' ? 'Seguimiento operativo y de capacidad' : 'Lectura de demanda y estacionalidad'}</dd></div></dl></div> : null}
       </div>
-    </details>
-  </>;
+    </section>
+
+    <details className="dataset-disclosure" open><summary>Qué requiere atención ahora</summary><div className="signal-register"><div><span className={airYoy >= 0 ? 'status good' : 'status warn'}>{airYoy >= 0 ? 'Mejora' : 'Atención'}</span><strong>Conectividad aérea</strong><p>{pct(airYoy,true)} en el tramo comparable.</p><button onClick={onOpenAirport}>Abrir serie</button></div><div><span className={hotelDelta !== null && hotelDelta >= 0 ? 'status good' : 'status neutral'}>Hotelería</span><strong>Ocupación al corte</strong><p>{hotelDelta === null ? 'Sin comparación equivalente.' : `${pp(hotelDelta)} frente al mismo corte.`}</p><button onClick={onOpenHotel}>Abrir análisis</button></div><div><span className={cruiseYoy !== null && cruiseYoy >= 0 ? 'status good' : 'status neutral'}>Cruceros</span><strong>Flujo marítimo</strong><p>{cruiseYoy === null ? 'Sin comparación equivalente.' : `${pct(cruiseYoy,true)} acumulado.`}</p><button onClick={onOpenInsights}>Ver implicaciones</button></div></div></details>
+  </section>;
 }

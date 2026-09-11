@@ -104,10 +104,10 @@ export function Panorama({ year, viewMode, compare, onOpenAirport, onOpenBusines
     <section className="analysis-block">
       <div className="analysis-block__head"><div><span>Calendario de presión</span><h2>Intensidad relativa por canal</h2></div><small>Cada fila se normaliza dentro de su propia fuente; no se suman canales.</small></div>
       <div className="heat-table">
-        <div className="heat-table__head"><span>Canal</span>{calendar.map((m) => <b key={m.period}>{monthName(m.period)}</b>)}</div>
-        <HeatRow label="Aeropuerto" values={calendar.map((m) => ({ value: m.air, intensity: m.airI }))} format={(v) => `${Math.round(v / 1000)}k`} />
-        <HeatRow label="Cruceros" values={calendar.map((m) => ({ value: m.cruise, intensity: m.cruiseI }))} format={(v) => v ? `${Math.round(v / 1000)}k` : '—'} />
-        <HeatRow label="Entradas extranjeras" values={calendar.map((m) => ({ value: m.market, intensity: m.marketI }))} format={(v) => v ? `${Math.round(v / 1000)}k` : '—'} />
+        <div className="heat-table__head"><span>Canal</span>{calendar.map((m: any) => <b key={m.period}>{monthName(m.period)}</b>)}</div>
+        <HeatRow label="Aeropuerto" values={calendar.map((m: any) => ({ value: m.air, intensity: m.airI }))} format={(v) => `${Math.round(v / 1000)}k`} />
+        <HeatRow label="Cruceros" values={calendar.map((m: any) => ({ value: m.cruise, intensity: m.cruiseI }))} format={(v) => v ? `${Math.round(v / 1000)}k` : '—'} />
+        <HeatRow label="Entradas extranjeras" values={calendar.map((m: any) => ({ value: m.market, intensity: m.marketI }))} format={(v) => v ? `${Math.round(v / 1000)}k` : '—'} />
       </div>
       <p className="section-caption">La matriz ayuda a identificar ventanas de mayor presión comercial y operativa sin convertir fuentes distintas en una cifra artificial de turistas.</p>
     </section>

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
-import { ChevronDown, Download, FileDown, Menu, RefreshCw, X } from 'lucide-react';
+import { ChevronDown, Download, FileDown } from 'lucide-react';
 import { data } from './data/model';
 import { downloadObservatoryCsv, printExecutiveReport, type ObservatoryYear } from './lib/export';
 
@@ -16,34 +16,15 @@ const Methodology = lazy(() => import('./pages/Methodology').then((m) => ({ defa
 export type ViewMode = 'monthly' | 'cumulative';
 type Tab = 'panorama' | 'business' | 'hotel' | 'airport' | 'cruises' | 'markets' | 'mobility' | 'insights' | 'methodology';
 
-const labels: Record<Tab, string> = {
-  panorama: 'Panorama', business: 'Comercio y servicios', hotel: 'Hotelería', airport: 'Aeropuerto',
-  cruises: 'Cruceros', markets: 'Mercados de origen', mobility: 'Movilidad terrestre',
-  insights: 'Brief ejecutivo', methodology: 'Fuentes y metodología',
-};
-
-const indicatorToTab: Record<string, Tab> = {
-  overview: 'panorama', airport: 'airport', hotel: 'hotel', cruises: 'cruises', markets: 'markets', mobility: 'mobility',
-};
-
 export default function App() {
   const [tab, setTab] = useState<Tab>('panorama');
   const [year, setYear] = useState<ObservatoryYear>(2026);
   const [viewMode, setViewMode] = useState<ViewMode>('monthly');
   const [compare, setCompare] = useState(true);
-  const [mobileOpen, setMobileOpen] = useState(false);
 
   const open = (next: Tab) => {
     setTab(next);
-    setMobileOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const resetFilters = () => {
-    setYear(2026);
-    setViewMode('monthly');
-    setCompare(true);
-    setTab('panorama');
   };
 
   const pages = useMemo<Record<Tab, React.ReactNode>>(() => ({
@@ -58,62 +39,52 @@ export default function App() {
     methodology: <Methodology />,
   }), [year, viewMode, compare]);
 
-  const activeIndicator = ['airport', 'hotel', 'cruises', 'markets', 'mobility'].includes(tab) ? tab : 'overview';
-  const activeAudience = tab === 'business' ? 'business' : tab === 'hotel' ? 'hotel' : 'overview';
-
-  return <div className="portal-shell">
-    <header className="masthead">
-      <button className="masthead__brand" onClick={() => open('panorama')}>
-        <span className="masthead__sigla">MZT</span>
-        <span><strong>Observatorio Turístico de Mazatlán</strong><small>Inteligencia para decisión empresarial y hotelera</small></span>
+  return <div className="ti-shell">
+    <header className="ti-header">
+      <button className="ti-brand" onClick={() => open('panorama')}>
+        <span className="ti-brand__monogram">MZT</span>
+        <span><strong>Observatorio Turístico</strong><small>Mazatlán · Inteligencia de destino</small></span>
       </button>
 
-      <nav className={`primary-nav ${mobileOpen ? 'open' : ''}`} aria-label="Navegación principal">
+      <nav className="ti-nav" aria-label="Navegación principal">
         <button className={tab === 'panorama' ? 'active' : ''} onClick={() => open('panorama')}>Panorama</button>
-        <details className="nav-menu">
-          <summary className={tab === 'business' || tab === 'hotel' ? 'active' : ''}>Sectores <ChevronDown size={13}/></summary>
-          <div className="nav-menu__panel">
-            <button onClick={() => open('business')}><strong>Comercio y servicios</strong><small>Estacionalidad, mercados y accesibilidad</small></button>
-            <button onClick={() => open('hotel')}><strong>Hotelería</strong><small>Ocupación, capacidad y absorción</small></button>
+        <button className={tab === 'business' ? 'active' : ''} onClick={() => open('business')}>Empresas</button>
+        <button className={tab === 'hotel' ? 'active' : ''} onClick={() => open('hotel')}>Hotelería</button>
+        <details className="ti-menu">
+          <summary className={['airport','cruises','markets','mobility'].includes(tab) ? 'active' : ''}>Explorar datos <ChevronDown size={13}/></summary>
+          <div className="ti-menu__panel">
+            <button onClick={() => open('airport')}><strong>Aeropuerto</strong><small>OMA · total, nacional e internacional</small></button>
+            <button onClick={() => open('cruises')}><strong>Cruceros</strong><small>DataTur / SEMAR · pasajeros y arribos</small></button>
+            <button onClick={() => open('markets')}><strong>Mercados</strong><small>UPM / DataTur · país, región y sexo</small></button>
+            <button onClick={() => open('mobility')}><strong>Movilidad</strong><small>SICT · aforos y composición vehicular</small></button>
           </div>
         </details>
-        <details className="nav-menu">
-          <summary className={['airport','cruises','markets','mobility'].includes(tab) ? 'active' : ''}>Indicadores <ChevronDown size={13}/></summary>
-          <div className="nav-menu__panel nav-menu__panel--wide">
-            <button onClick={() => open('airport')}><strong>Aeropuerto</strong><small>Pasajeros, mezcla nacional/internacional</small></button>
-            <button onClick={() => open('cruises')}><strong>Cruceros</strong><small>Pasajeros, arribos e intensidad</small></button>
-            <button onClick={() => open('markets')}><strong>Mercados de origen</strong><small>Concentración y ranking por nacionalidad</small></button>
-            <button onClick={() => open('mobility')}><strong>Movilidad terrestre</strong><small>Aforos y corredores SICT</small></button>
-          </div>
-        </details>
-        <button className={tab === 'insights' ? 'active' : ''} onClick={() => open('insights')}>Brief ejecutivo</button>
-        <button className={tab === 'methodology' ? 'active' : ''} onClick={() => open('methodology')}>Metodología</button>
+        <button className={tab === 'insights' ? 'active' : ''} onClick={() => open('insights')}>Brief</button>
+        <button className={tab === 'methodology' ? 'active' : ''} onClick={() => open('methodology')}>Fuentes</button>
       </nav>
 
-      <div className="masthead__actions">
-        <button onClick={() => downloadObservatoryCsv(year)}><Download size={14}/> Datos</button>
-        <button onClick={printExecutiveReport}><FileDown size={14}/> PDF</button>
+      <div className="ti-header__actions">
+        <button title="Descargar CSV" onClick={() => downloadObservatoryCsv(year)}><Download size={15}/><span>Datos</span></button>
+        <button title="Imprimir o guardar PDF" onClick={printExecutiveReport}><FileDown size={15}/><span>PDF</span></button>
       </div>
-      <button className="masthead__menu" onClick={() => setMobileOpen((v) => !v)} aria-label="Abrir navegación">{mobileOpen ? <X size={19}/> : <Menu size={19}/>}</button>
     </header>
 
-    <section className="selection-bar" aria-label="Selección de datos">
-      <div className="selection-bar__title"><strong>Explorador</strong><span>Use filtros globales y entre a cada módulo para profundizar.</span></div>
-      <label><span>Audiencia</span><select value={activeAudience} onChange={(e) => open(e.target.value === 'business' ? 'business' : e.target.value === 'hotel' ? 'hotel' : 'panorama')}><option value="overview">General</option><option value="business">Comercio y servicios</option><option value="hotel">Hotelería</option></select></label>
-      <label><span>Año</span><select value={year} onChange={(e) => setYear(Number(e.target.value) as ObservatoryYear)}><option value={2026}>2026</option><option value={2025}>2025</option></select></label>
-      <label><span>Frecuencia</span><select value={viewMode} onChange={(e) => setViewMode(e.target.value as ViewMode)}><option value="monthly">Mensual</option><option value="cumulative">Acumulada</option></select></label>
-      <label><span>Conjunto</span><select value={activeIndicator} onChange={(e) => open(indicatorToTab[e.target.value] ?? 'panorama')}><option value="overview">Panorama integrado</option><option value="airport">Aeropuerto</option><option value="hotel">Hotelería</option><option value="cruises">Cruceros</option><option value="markets">Mercados</option><option value="mobility">Movilidad</option></select></label>
-      <label><span>Comparación</span><select value={compare ? 'yoy' : 'none'} onChange={(e) => setCompare(e.target.value === 'yoy')}><option value="yoy">Mismo periodo anterior</option><option value="none">Sin comparación</option></select></label>
-      <button className="selection-reset" onClick={resetFilters}><RefreshCw size={13}/> Restablecer</button>
-    </section>
-
-    <div className="dataset-context">
-      <span className="dataset-context__crumb">Observatorio / {labels[tab]}</span>
-      <div><span>Año <strong>{year}</strong></span><span>Vista <strong>{viewMode === 'monthly' ? 'Mensual' : 'Acumulada'}</strong></span><span>Corte <strong>{data.meta.cutoff}</strong></span></div>
+    <div className="ti-contextbar">
+      <div className="ti-contextbar__status"><span className="live-dot"/><strong>Base auditada</strong><span>Corte {data.meta.cutoff}</span></div>
+      <div className="ti-contextbar__controls">
+        <div className="control-cluster"><span>Año</span><button className={year === 2025 ? 'active' : ''} onClick={() => setYear(2025)}>2025</button><button className={year === 2026 ? 'active' : ''} onClick={() => setYear(2026)}>2026</button></div>
+        <div className="control-cluster"><span>Lectura</span><button className={viewMode === 'monthly' ? 'active' : ''} onClick={() => setViewMode('monthly')}>Mensual</button><button className={viewMode === 'cumulative' ? 'active' : ''} onClick={() => setViewMode('cumulative')}>Acumulada</button></div>
+        <label className="compare-switch"><input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)}/><span/>Comparar año previo</label>
+      </div>
     </div>
 
-    <main className="dataset-main"><Suspense fallback={<div className="loading-state">Cargando datos…</div>}>{pages[tab]}</Suspense></main>
+    <main className="ti-main">
+      <Suspense fallback={<div className="ti-loading">Cargando módulo de inteligencia…</div>}>{pages[tab]}</Suspense>
+    </main>
 
-    <footer className="portal-footer"><span>Observatorio Turístico de Mazatlán</span><span>OMA · DataTur · SEMAR · UPM · SICT · INEGI</span><button onClick={() => open('methodology')}>Cobertura y metodología</button></footer>
+    <footer className="ti-footer">
+      <div><strong>Observatorio Turístico de Mazatlán</strong><span>OMA · DataTur · SEMAR · UPM · SICT · INEGI EVI</span></div>
+      <button onClick={() => open('methodology')}>Metodología, cobertura y limitaciones</button>
+    </footer>
   </div>;
 }

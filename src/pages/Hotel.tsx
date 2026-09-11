@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChartFrame, tooltipStyle } from '../components/ChartFrame';
+import enriched from '../data/enriched.json';
 import { integer, pct, pp } from '../lib/format';
 import type { ObservatoryYear } from '../lib/export';
 import { airportIntelligence, hotelIntelligence, marketIntelligence } from '../lib/intelligence';
@@ -11,65 +12,88 @@ type Props = {
   onNavigate: (tab: 'panorama' | 'business' | 'hotel' | 'airport' | 'cruises' | 'markets' | 'mobility' | 'insights' | 'methodology') => void;
 };
 
-type Focus = 'performance' | 'capacity' | 'demand';
+type Focus = 'operation' | 'capacity' | 'demand' | 'markets';
 
 export function Hotel({ year, compare, onNavigate }: Props) {
-  const [focus, setFocus] = useState<Focus>('performance');
+  const [focus, setFocus] = useState<Focus>('operation');
   const hotel = hotelIntelligence(year);
   const air = airportIntelligence(year);
   const market = marketIntelligence(year);
-
+  const marketExtra = (enriched.markets as any)[String(year)] ?? (enriched.markets as any)['2026'];
+  const weekly = (enriched.hotelWeekly as any[]).filter((d:any) => d.anio === year);
+  const previousWeekly = (enriched.hotelWeekly as any[]).filter((d:any) => d.anio === year - 1);
+  const weeklySeries = weekly.map((d:any) => ({ ...d, week:Number(d.periodo.slice(6)), previous:previousWeekly.find((p:any)=>p.periodo.endsWith(d.periodo.slice(4)))?.ocupacion ?? null }));
+  const latestWeek = weekly.at(-1);
+  const prevWeek = latestWeek ? previousWeekly.find((d:any)=>d.periodo.endsWith(latestWeek.periodo.slice(4))) : null;
+  const weekDelta = latestWeek && prevWeek ? latestWeek.ocupacion - prevWeek.ocupacion : null;
   const capacityText = hotel.capacityGrowth === null ? '—' : pct(hotel.capacityGrowth, true);
   const occupiedText = hotel.occupiedGrowth === null ? '—' : pct(hotel.occupiedGrowth, true);
   const absorptionText = hotel.absorptionSpread === null ? '—' : `${hotel.absorptionSpread.toFixed(1)} pp`;
 
-  return <section className="dataset-page sector-page">
-    <header className="dataset-heading dataset-heading--editorial">
-      <div><span>Hotelería · {year}</span><h1>Desempeño, oferta y capacidad de absorción</h1><p>El módulo compara cortes equivalentes para responder si la ocupación mejora porque hay más demanda, más oferta, o ambas cosas al mismo tiempo.</p></div>
-      <div className="dataset-heading__links"><button onClick={() => onNavigate('markets')}>Mercados</button><button onClick={() => onNavigate('airport')}>Aeropuerto</button><button onClick={() => onNavigate('insights')}>Brief ejecutivo</button></div>
+  return <article className="sector-workspace hotel-workspace">
+    <header className="sector-masthead">
+      <div><span>HOTELERÍA · {year}</span><h1>Operación hotelera: ocupación, capacidad y señales de demanda</h1><p>Seguimiento mensual y semanal acumulado, comparado a cortes equivalentes. La prioridad es distinguir crecimiento de demanda, expansión de oferta y exposición a mercados.</p></div>
+      <aside><strong>{latestWeek ? `${latestWeek.ocupacion}%` : '—'}</strong><span>ocupación al último corte semanal</span><b className={(weekDelta ?? 0)>=0?'tone-up':'tone-down'}>{weekDelta !== null ? pp(weekDelta) : '—'} vs semana equivalente</b></aside>
     </header>
 
-    <section className="hotel-benchmark">
-      <div className="hotel-benchmark__head"><span>Indicador</span><span>{year - 1} · mismo corte</span><span>{year}</span><span>Cambio</span><span>Lectura</span></div>
-      <div><strong>Ocupación</strong><span>{hotel.sameCutPrevious ? `${hotel.sameCutPrevious.ocupacion_pct}%` : '—'}</span><b>{hotel.latest ? `${hotel.latest.ocupacion_pct}%` : '—'}</b><span className={(hotel.occupancyDelta ?? 0) >= 0 ? 'positive' : 'negative'}>{compare && hotel.occupancyDelta !== null ? pp(hotel.occupancyDelta) : '—'}</span><p>Comparación directa a corte equivalente.</p></div>
-      <div><strong>Cuartos disponibles</strong><span>{hotel.sameCutPrevious ? integer.format(hotel.sameCutPrevious.cuartos_disponibles_promedio_diario) : '—'}</span><b>{hotel.latest ? integer.format(hotel.latest.cuartos_disponibles_promedio_diario) : '—'}</b><span>{capacityText}</span><p>Expansión o contracción de la oferta formal reportada.</p></div>
-      <div><strong>Cuartos ocupados</strong><span>{hotel.sameCutPrevious ? integer.format(hotel.sameCutPrevious.cuartos_ocupados) : '—'}</span><b>{hotel.latest ? integer.format(hotel.latest.cuartos_ocupados) : '—'}</b><span className={(hotel.occupiedGrowth ?? 0) >= 0 ? 'positive' : 'negative'}>{occupiedText}</span><p>Permite ver si la demanda absorbió el cambio de capacidad.</p></div>
+    <nav className="workspace-tabs">
+      <button className={focus==='operation'?'active':''} onClick={()=>setFocus('operation')}>Operación</button>
+      <button className={focus==='capacity'?'active':''} onClick={()=>setFocus('capacity')}>Capacidad y absorción</button>
+      <button className={focus==='demand'?'active':''} onClick={()=>setFocus('demand')}>Demanda</button>
+      <button className={focus==='markets'?'active':''} onClick={()=>setFocus('markets')}>Mercados</button>
+    </nav>
+
+    <section className="metric-ledger metric-ledger--hotel">
+      <div><span>Ocupación mensual al corte</span><strong>{hotel.latest ? `${hotel.latest.ocupacion_pct}%`:'—'}</strong><b>{compare && hotel.occupancyDelta !== null ? pp(hotel.occupancyDelta):'—'}</b></div>
+      <div><span>Oferta formal</span><strong>{hotel.latest ? integer.format(hotel.latest.cuartos_disponibles_promedio_diario):'—'}</strong><b>{capacityText}</b></div>
+      <div><span>Cuartos ocupados</span><strong>{hotel.latest ? integer.format(hotel.latest.cuartos_ocupados):'—'}</strong><b>{occupiedText}</b></div>
+      <div><span>Absorción relativa</span><strong>{absorptionText}</strong><b>ocupados − oferta</b></div>
+      <div><span>Aéreo internacional</span><strong>{integer.format(air.international)}</strong><b>{air.internationalShare.toFixed(1)}% del total aéreo</b></div>
     </section>
 
-    <section className="hotel-conclusion">
-      <div><span>Señal de absorción</span><strong>{absorptionText}</strong></div>
-      <p>{hotel.absorptionSpread !== null && hotel.absorptionSpread > 0 ? `Los cuartos ocupados están creciendo ${absorptionText} más rápido que la oferta disponible al corte comparable. Esto es una señal operativa favorable para absorción, aunque no sustituye ADR o RevPAR.` : 'La oferta está creciendo al mismo ritmo o más rápido que los cuartos ocupados; conviene vigilar presión competitiva y precios.'}</p>
-    </section>
-
-    <div className="section-switcher">
-      <label><span>Vista hotelera</span><select value={focus} onChange={(e) => setFocus(e.target.value as Focus)}><option value="performance">Desempeño y ocupación</option><option value="capacity">Capacidad y absorción</option><option value="demand">Contexto de demanda</option></select></label>
-      <span>DataTur publica cortes acumulados al mes; se comparan cortes equivalentes.</span>
-    </div>
-
-    {focus === 'performance' ? <section className="analysis-block">
-      <div className="analysis-block__head"><div><span>Desempeño</span><h2>Trayectoria de ocupación acumulada</h2></div><small>Fuente: DataTur</small></div>
-      <div className="analysis-block__grid">
-        <ChartFrame large><ResponsiveContainer width="100%" height="100%"><LineChart data={hotel.current} margin={{top:12,right:16,left:-8,bottom:0}}><CartesianGrid strokeDasharray="2 5" vertical={false} stroke="#d9dfe3"/><XAxis dataKey="label" tick={{fontSize:11,fill:'#66717a'}} tickLine={false} axisLine={false}/><YAxis domain={[30,70]} tickFormatter={(v:any)=>`${v}%`} tick={{fontSize:11,fill:'#66717a'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={tooltipStyle} formatter={(v:any)=>`${v}%`}/><Line type="monotone" dataKey="ocupacion_pct" name="Ocupación" stroke="#1769aa" strokeWidth={2.5} dot={{r:2.2}}/></LineChart></ResponsiveContainer></ChartFrame>
-        <div className="fact-sheet"><div><span>Último corte</span><strong>{hotel.latest?.periodo ?? '—'}</strong></div><div><span>Ocupación</span><strong>{hotel.latest ? `${hotel.latest.ocupacion_pct}%` : '—'}</strong></div><div><span>Variación interanual</span><strong>{hotel.occupancyDelta !== null ? pp(hotel.occupancyDelta) : '—'}</strong></div><div><span>Cuartos ocupados</span><strong>{hotel.latest ? integer.format(hotel.latest.cuartos_ocupados) : '—'}</strong></div><p>La lectura correcta es acumulada al corte. No se debe promediar enero, febrero, marzo, etc. como si fueran tasas mensuales independientes.</p></div>
+    {focus === 'operation' ? <section className="workspace-section">
+      <div className="workspace-section__head"><div><span>Seguimiento fino</span><h2>Ocupación semanal acumulada</h2><p>Permite ver el movimiento dentro del año con mayor frecuencia que el reporte mensual.</p></div><button onClick={()=>onNavigate('methodology')}>Ver definición</button></div>
+      <div className="workspace-split workspace-split--wide">
+        <div className="workspace-chart"><ChartFrame large><ResponsiveContainer width="100%" height="100%"><LineChart data={weeklySeries} margin={{top:14,right:18,left:-8,bottom:0}}><CartesianGrid strokeDasharray="1 5" vertical={false} stroke="#d8d9d3"/><XAxis dataKey="week" tick={{fontSize:10,fill:'#77736d'}} tickLine={false} axisLine={false}/><YAxis domain={[35,70]} tickFormatter={(v:any)=>`${v}%`} tick={{fontSize:10,fill:'#77736d'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={tooltipStyle} formatter={(v:any)=>`${v}%`}/>{compare ? <Line type="monotone" dataKey="previous" name={`${year-1}`} stroke="#aaa7a0" strokeDasharray="5 4" dot={false}/> : null}<Line type="monotone" dataKey="ocupacion" name={`${year}`} stroke="#28745f" strokeWidth={2.5} dot={false}/></LineChart></ResponsiveContainer></ChartFrame></div>
+        <aside className="workspace-brief">
+          <div><span>Última semana</span><strong>{latestWeek?.periodo ?? '—'}</strong></div>
+          <div><span>Ocupación</span><strong>{latestWeek ? `${latestWeek.ocupacion}%`:'—'}</strong></div>
+          <div><span>Oferta disponible</span><strong>{latestWeek ? integer.format(latestWeek.disponibles):'—'}</strong></div>
+          <div><span>Cuartos ocupados</span><strong>{latestWeek ? integer.format(latestWeek.ocupados):'—'}</strong></div>
+          <p><strong>Uso:</strong> seguimiento operativo, presión de capacidad y lectura de absorción. No es ocupación “de esa semana”; es acumulada a la semana.</p>
+        </aside>
       </div>
     </section> : null}
 
-    {focus === 'capacity' ? <section className="analysis-block">
-      <div className="analysis-block__head"><div><span>Oferta formal</span><h2>Capacidad disponible y absorción</h2></div></div>
-      <div className="analysis-block__grid">
-        <ChartFrame large><ResponsiveContainer width="100%" height="100%"><AreaChart data={hotel.current} margin={{top:12,right:16,left:-8,bottom:0}}><CartesianGrid strokeDasharray="2 5" vertical={false} stroke="#d9dfe3"/><XAxis dataKey="label" tick={{fontSize:11,fill:'#66717a'}} tickLine={false} axisLine={false}/><YAxis tick={{fontSize:11,fill:'#66717a'}} tickLine={false} axisLine={false} tickFormatter={(v:any)=>`${Math.round(Number(v)/1000)}k`}/><Tooltip contentStyle={tooltipStyle} formatter={(v:any)=>integer.format(Number(v))}/><Area type="monotone" dataKey="cuartos_disponibles_promedio_diario" name="Disponibles" stroke="#1769aa" strokeWidth={2.4} fill="#e9f1f8"/><Area type="monotone" dataKey="cuartos_ocupados" name="Ocupados" stroke="#0b7a60" strokeWidth={2.2} fill="#e9f4ef"/></AreaChart></ResponsiveContainer></ChartFrame>
-        <div className="capacity-ledger"><div><span>Crecimiento de oferta</span><strong>{capacityText}</strong></div><div><span>Crecimiento de ocupados</span><strong>{occupiedText}</strong></div><div><span>Diferencial de absorción</span><strong>{absorptionText}</strong></div><p>Cuando los cuartos ocupados crecen más rápido que la oferta, la expansión de capacidad está siendo absorbida con mayor intensidad. Para revenue management faltan ADR y RevPAR, que deben integrarse como siguiente capa.</p></div>
+    {focus === 'capacity' ? <section className="workspace-section">
+      <div className="workspace-section__head"><div><span>Oferta formal</span><h2>¿La expansión de cuartos está siendo absorbida?</h2><p>El punto clave es comparar crecimiento de disponibles con crecimiento de ocupados al mismo corte.</p></div></div>
+      <div className="workspace-split workspace-split--wide">
+        <div className="workspace-chart"><ChartFrame large><ResponsiveContainer width="100%" height="100%"><AreaChart data={hotel.current} margin={{top:14,right:18,left:-8,bottom:0}}><CartesianGrid strokeDasharray="1 5" vertical={false} stroke="#d8d9d3"/><XAxis dataKey="label" tick={{fontSize:10,fill:'#77736d'}} tickLine={false} axisLine={false}/><YAxis tick={{fontSize:10,fill:'#77736d'}} tickLine={false} axisLine={false} tickFormatter={(v:any)=>`${Math.round(Number(v)/1000)}k`}/><Tooltip contentStyle={tooltipStyle} formatter={(v:any)=>integer.format(Number(v))}/><Area type="monotone" dataKey="cuartos_disponibles_promedio_diario" name="Disponibles" stroke="#163f59" fill="#e8edf0" strokeWidth={2.3}/><Area type="monotone" dataKey="cuartos_ocupados" name="Ocupados" stroke="#28745f" fill="#e7f0eb" strokeWidth={2.3}/></AreaChart></ResponsiveContainer></ChartFrame></div>
+        <div className="comparison-ledger">
+          <div className="comparison-ledger__head"><span>Indicador</span><span>{year-1}</span><span>{year}</span><span>Cambio</span></div>
+          <div><strong>Ocupación</strong><span>{hotel.sameCutPrevious ? `${hotel.sameCutPrevious.ocupacion_pct}%`:'—'}</span><span>{hotel.latest ? `${hotel.latest.ocupacion_pct}%`:'—'}</span><b>{hotel.occupancyDelta !== null ? pp(hotel.occupancyDelta):'—'}</b></div>
+          <div><strong>Disponibles</strong><span>{hotel.sameCutPrevious ? integer.format(hotel.sameCutPrevious.cuartos_disponibles_promedio_diario):'—'}</span><span>{hotel.latest ? integer.format(hotel.latest.cuartos_disponibles_promedio_diario):'—'}</span><b>{capacityText}</b></div>
+          <div><strong>Ocupados</strong><span>{hotel.sameCutPrevious ? integer.format(hotel.sameCutPrevious.cuartos_ocupados):'—'}</span><span>{hotel.latest ? integer.format(hotel.latest.cuartos_ocupados):'—'}</span><b>{occupiedText}</b></div>
+          <p>{hotel.absorptionSpread !== null && hotel.absorptionSpread > 0 ? `Los cuartos ocupados crecen ${absorptionText} más rápido que la oferta disponible. Es una señal favorable de absorción.` : 'La oferta crece al mismo ritmo o más rápido que los cuartos ocupados; conviene vigilar presión competitiva.'}</p>
+        </div>
       </div>
     </section> : null}
 
-    {focus === 'demand' ? <section className="analysis-block">
-      <div className="analysis-block__head"><div><span>Contexto de demanda</span><h2>Señales externas que importan al hotelero</h2></div></div>
-      <div className="demand-ledger">
-        <div><strong>Pasajeros aéreos</strong><b>{integer.format(air.total)}</b><span className={air.yoy >= 0 ? 'positive' : 'negative'}>{pct(air.yoy, true)}</span><p>Conectividad terminal acumulada; no equivale a noches-habitación.</p><button onClick={() => onNavigate('airport')}>Abrir aeropuerto</button></div>
-        <div><strong>Pasajeros internacionales</strong><b>{integer.format(air.international)}</b><span>{air.internationalShare.toFixed(1)}% del total aéreo</span><p>Sirve para dimensionar exposición a mercados no nacionales.</p><button onClick={() => onNavigate('airport')}>Ver mezcla</button></div>
-        <div><strong>Entradas extranjeras</strong><b>{integer.format(market.total)}</b><span>{market.top2Share.toFixed(1)}% top 2</span><p>La concentración internacional es alta; promoción y alianzas dependen mucho de pocos mercados.</p><button onClick={() => onNavigate('markets')}>Ver mercados</button></div>
+    {focus === 'demand' ? <section className="workspace-section">
+      <div className="workspace-section__head"><div><span>Contexto externo</span><h2>Conectividad y demanda internacional</h2><p>Señales relacionadas con la demanda hotelera, pero que no deben convertirse directamente en noches-habitación.</p></div></div>
+      <div className="evidence-ledger">
+        <div><strong>Pasajeros aéreos</strong><b>{integer.format(air.total)}</b><span className={air.yoy>=0?'tone-up':'tone-down'}>{pct(air.yoy,true)}</span><p>{air.recentTurnPositive ? 'Julio y agosto ya muestran recuperación interanual.' : 'El acumulado sigue sin giro claro.'}</p><button onClick={()=>onNavigate('airport')}>Abrir aeropuerto</button></div>
+        <div><strong>Internacionales OMA</strong><b>{integer.format(air.international)}</b><span>{air.internationalShare.toFixed(1)}% del total</span><p>Es el componente más directamente relacionado con exposición externa.</p><button onClick={()=>onNavigate('airport')}>Ver mezcla</button></div>
+        <div><strong>Entradas extranjeras UPM</strong><b>{integer.format(market.total)}</b><span>{market.top2Share.toFixed(1)}% top 2</span><p>Mide entradas extranjeras por nacionalidad en el aeropuerto, no pasajeros terminales totales.</p><button onClick={()=>onNavigate('markets')}>Ver mercados</button></div>
       </div>
-      <div className="market-analysis-layout market-analysis-layout--hotel"><div className="market-table market-table--shares"><div className="market-table__head"><span>#</span><span>Mercado</span><span>Entradas</span><span>Participación</span></div>{market.countries.slice(0, 8).map((d:any, i:number) => { const share = market.total ? d.valor_entradas / market.total * 100 : 0; return <div className="market-table__row" key={d.pais}><span>{String(i + 1).padStart(2, '0')}</span><strong>{d.pais}</strong><b>{integer.format(d.valor_entradas)}</b><div className="share-cell"><span>{share.toFixed(1)}%</span><i style={{width:`${share}%`}}/></div></div>; })}</div><aside className="analysis-notes"><h3>Implicación hotelera</h3><p>Una estructura internacional tan concentrada hace que cambios de conectividad, percepción o poder adquisitivo en Canadá y Estados Unidos puedan mover con fuerza la demanda externa.</p><dl><div><dt>Top 2</dt><dd>{market.top2Share.toFixed(1)}%</dd></div><div><dt>Top 5</dt><dd>{market.top5Share.toFixed(1)}%</dd></div><div><dt>HHI</dt><dd>{market.hhi.toFixed(0)}</dd></div></dl></aside></div>
     </section> : null}
-  </section>;
+
+    {focus === 'markets' ? <section className="workspace-section">
+      <div className="workspace-section__head"><div><span>Segmentación</span><h2>Mercados que sostienen la demanda internacional</h2><p>País, región y sexo para orientar promoción, alianzas y producto.</p></div><button onClick={()=>onNavigate('markets')}>Abrir detalle</button></div>
+      <div className="market-story-grid">
+        <div className="country-ranking"><div className="country-ranking__head"><span>Mercado</span><span>Entradas</span><span>Participación</span></div>{(marketExtra?.countries ?? []).slice(0,10).map((d:any)=><div key={d.name}><strong>{d.name}</strong><span>{integer.format(d.value)}</span><div><i style={{width:`${Math.min(100,d.share)}%`}}/><b>{d.share.toFixed(1)}%</b></div></div>)}</div>
+        <aside className="market-profile"><div><span>Top 2</span><strong>{market.top2Share.toFixed(1)}%</strong></div><div><span>América del Norte</span><strong>{Number(marketExtra?.regions?.[0]?.share ?? 0).toFixed(1)}%</strong></div><div><span>Mayor grupo por sexo</span><strong>{marketExtra?.sex?.[0]?.name ?? '—'} {Number(marketExtra?.sex?.[0]?.share ?? 0).toFixed(1)}%</strong></div><p>La dependencia de Canadá y Estados Unidos es estructuralmente alta. Cambios de conectividad, tipo de cambio o confianza en esos mercados pueden transmitirse rápidamente a la demanda externa.</p></aside>
+      </div>
+    </section> : null}
+  </article>;
 }
